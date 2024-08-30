@@ -1,0 +1,5 @@
+defaults:
+  - hierarchial_cruise_control_config
+  - _self_
+
+n_cars: 10

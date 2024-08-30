@@ -9,10 +9,11 @@ from .meltingpot.common import MeltingPotTask
 from .pettingzoo.common import PettingZooTask
 from .smacv2.common import Smacv2Task
 from .vmas.common import VmasTask
+from .hierarchial.common import HierarchialTask
 
 # The enum classes for the environments available.
 # This is the only object in this file you need to modify when adding a new environment.
-tasks = [VmasTask, Smacv2Task, PettingZooTask, MeltingPotTask]
+tasks = [VmasTask, Smacv2Task, PettingZooTask, MeltingPotTask, HierarchialTask]
 
 # This is a registry mapping "envname/task_name" to the EnvNameTask.TASK_NAME enum
 # It is used by automatically load task enums from yaml files.
