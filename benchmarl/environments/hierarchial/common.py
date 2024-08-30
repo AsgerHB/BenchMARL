@@ -74,6 +74,9 @@ class HierarchialTask(Task):
         # If provided, must be a CompositeSpec with one "state" entry
         return None
 
+    def reward_spec(self, env: EnvBase) -> CompositeSpec:
+        return env.reward_spec
+
     def action_mask_spec(self, env: EnvBase) -> Optional[CompositeSpec]:
         # A spec for the action mask.
         # If provided, must be a CompositeSpec with one (group_name, "action_mask") entry per group.

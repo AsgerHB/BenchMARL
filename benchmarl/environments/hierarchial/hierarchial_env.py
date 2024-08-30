@@ -1,6 +1,8 @@
 import torch
+from torchrl.envs import check_env_specs
 from torchrl.envs import EnvBase
-from torchrl.data import DiscreteTensorSpec, CompositeSpec, UnboundedDiscreteTensorSpec
+from torchrl.data import DiscreteTensorSpec, CompositeSpec, UnboundedContinuousTensorSpec
+from tensordict import TensorDict
 
 class HierarcialEnvironment(EnvBase):
     def __init__(self,
@@ -14,34 +16,64 @@ class HierarcialEnvironment(EnvBase):
 
         super().__init__(device=device)
 
-        n_cars = config["n_cars"]
-        self.cars = [ {"name": f"Car{i}"} for i in range(1, n_cars + 1)]
+        self.set_seed(seed)
+
+        self.n_agents = config["n_controlled_cars"]
+        self.cars = [ {"name": f"Car{i}"} for i in range(1, self.n_agents + 1)]
 
         # If provided, must be a CompositeSpec with one (group_name, "action") entry per group.
-        self.full_action_spec = CompositeSpec({("cars", "action"): DiscreteTensorSpec(n=3, shape=[n_cars])})
+        self.full_action_spec = CompositeSpec({("cars", "action"): DiscreteTensorSpec(n=3, shape=[self.n_agents], dtype=torch.float32)})
 
         # Must be a CompositeSpec with one (group_name, observation_key) entry per group.
-        observation_spec = UnboundedDiscreteTensorSpec(shape=[10, 3])
-        #agents_observation_spec = CompositeSpec({f"Car{i}": observation_spec for i in range(1, n_cars + 1)}, shape=[n_cars])
-        self.full_observation_spec = CompositeSpec({("cars", "observation"): observation_spec}, shape=[n_cars])
+        self.full_observation_spec = CompositeSpec({
+                ("cars", "observations"): UnboundedContinuousTensorSpec(shape=[self.n_agents, 3], dtype=torch.float32),
+            }, shape=[self.n_agents])
+
+        self.reward_spec = UnboundedContinuousTensorSpec(shape=[self.n_agents], dtype=torch.float32)
+        
         # Set the batch size
         self.batch_size = torch.Size([num_envs])
 
-        # Update the specs with the correct batch size
-        # This ensures that the action and observation specs are correctly expanded
-        # to match the number of environments being run in parallel.
-        self.full_action_spec = self.full_action_spec.expand(self.batch_size)
-        self.full_observation_spec = self.full_observation_spec.expand(self.batch_size)
-
-
-
-        print("👯👯")
-
     def _reset(self, tensordict, **kwargs):
-        print("Starting over :V")
+        # There are n_agents + 1 cars, because the first car is uncontrollable. That means n_agents distance and n_agents + 1 velocities.
+        
+        velocity = torch.zeros(self.n_agents + 1, dtype=torch.float32)
+
+        velocity_ego = torch.narrow(velocity, 0, 1, self.n_agents)
+        velocity_front = torch.narrow(velocity, 0, 0, self.n_agents)
+
+        distance = torch.tensor([50 for car in range(1, self.n_agents + 1)])
+
+        obsrvations = torch.stack([velocity_ego, velocity_front, distance], dim=1)
+
+        reward = torch.zeros(self.n_agents, dtype=torch.float32)
+
+        return TensorDict({
+            "cars": TensorDict({
+                "observations": obsrvations,
+                "done": torch.zeros(self.n_agents, dtype=torch.bool)
+            }),
+        }, batch_size=[10])
     
     def _step(self, tensordict):
-        print("👉", tensordict)
+        #print("👉", tensordict["done"])
+
+        reward = torch.zeros(self.n_agents, dtype=torch.float32)
+
+        return  TensorDict({
+            "cars": TensorDict({
+                "observations": tensordict["cars", "observations"] + torch.ones((self.n_agents, 3), dtype=torch.float32),
+                "done": torch.zeros(self.n_agents, dtype=torch.bool),
+            }),
+            "reward" : reward,
+        }, batch_size=[10])
 
     def _set_seed(self, seed):
-        print("uwu")
+        rng = torch.manual_seed(seed)
+        self.rng = rng
+
+
+if __name__ == "__main__":
+    env = HierarcialEnvironment("CruiseControl", 10, False, 2020, "cpu", True, n_agents=10)
+    check_env_specs(env)
+    print("🦑🦑")
