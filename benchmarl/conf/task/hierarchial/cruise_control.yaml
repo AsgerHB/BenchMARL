@@ -2,4 +2,4 @@ defaults:
   - hierarchial_cruise_control_config
   - _self_
 
-n_controlled_cars: 10
+n_agents: 10

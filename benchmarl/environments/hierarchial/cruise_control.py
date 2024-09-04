@@ -9,4 +9,4 @@ from dataclasses import dataclass, MISSING
 
 @dataclass
 class TaskConfig:
-    n_controlled_cars: int = MISSING
+    n_agents: int = MISSING

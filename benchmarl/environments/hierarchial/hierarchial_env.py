@@ -12,7 +12,6 @@ from torch import nn
 class HierarcialEnvironment(EnvBase):
     def __init__(self,
             scenario,
-            num_envs,
             seed,
             device,
             **config):
@@ -22,23 +21,25 @@ class HierarcialEnvironment(EnvBase):
         self.set_seed(seed)
 
         self.n_agents = config["n_agents"]
-        self.cars = [ {"name": f"Car{i}"} for i in range(1, self.n_agents + 1)]
+        self.agents = [ {"name": f"Car{i}"} for i in range(1, self.n_agents + 1)]
+
+        action_spec = DiscreteTensorSpec(n=3, shape=[self.n_agents, 1], dtype=torch.float32)
 
         # If provided, must be a CompositeSpec with one (group_name, "action") entry per group.
-        self.full_action_spec = CompositeSpec({("cars", "action"): DiscreteTensorSpec(n=3, shape=[self.n_agents], dtype=torch.float32)})
+        self.full_action_spec = CompositeSpec({("agents", "action"): action_spec})
+
+        observation_spec = UnboundedContinuousTensorSpec(shape=[self.n_agents, 3], dtype=torch.float32)
 
         # Must be a CompositeSpec with one (group_name, observation_key) entry per group.
-        self.full_observation_spec = CompositeSpec({
-                ("cars", "observations"): UnboundedContinuousTensorSpec(shape=[self.n_agents, 3], dtype=torch.float32),
-            }, shape=[self.n_agents])
+        self.full_observation_spec = CompositeSpec({("agents", "observations"): observation_spec}, shape=[self.n_agents])
 
-        self.reward_spec = UnboundedContinuousTensorSpec(shape=[self.n_agents], dtype=torch.float32)
         
-        # Set the batch size
-        self.batch_size = torch.Size([num_envs])
+        reward_spec = UnboundedContinuousTensorSpec(shape=[self.n_agents], dtype=torch.float32)
+
+        self.full_reward_spec = CompositeSpec({("agents", "reward"): reward_spec})
 
     def _reset(self, tensordict, **kwargs):
-        # There are n_agents + 1 cars, because the first car is uncontrollable. That means n_agents distance and n_agents + 1 velocities.
+        # There are n_agents + 1 agents, because the first car is uncontrollable. That means n_agents distance and n_agents + 1 velocities.
         
         velocity = torch.zeros(self.n_agents + 1, dtype=torch.float32)
 
@@ -49,31 +50,28 @@ class HierarcialEnvironment(EnvBase):
 
         obsrvations = torch.stack([velocity_ego, velocity_front, distance], dim=1)
 
-        reward = torch.zeros(self.n_agents, dtype=torch.float32)
-
         return TensorDict({
-            "cars": TensorDict({
+            "agents": TensorDict({
                 "observations": obsrvations,
             }),
-            "done": torch.zeros(self.n_agents, dtype=torch.bool)
-        }, batch_size=[self.n_agents])
+        })
     
     def _step(self, tensordict):
         #print("👉", tensordict["done"])
 
-        actions = tensordict["cars", "action"]
-        observations = tensordict["cars", "observations"]
+        actions = tensordict["agents", "action"]
+        observations = tensordict["agents", "observations"]
         new_observations = torch.clone(observations)
-        new_observations[:, 2] += actions
+        new_observations[:, 2] += actions.flatten()
         reward = new_observations[:, 2]
 
         return  TensorDict({
-            "cars": TensorDict({
+            "agents": TensorDict({
                 "observations": new_observations,
+                "reward" : reward,
             }),
-            "done": torch.zeros(self.n_agents, dtype=torch.bool),
-            "reward" : reward,
-        }, batch_size=[10])
+            "done": False
+        })
 
     def _set_seed(self, seed):
         rng = torch.manual_seed(seed)
@@ -81,7 +79,7 @@ class HierarcialEnvironment(EnvBase):
 
 
 if __name__ == "__main__":
-    env = HierarcialEnvironment("CruiseControl", 10, 2020, "cpu", n_agents=10)
+    env = HierarcialEnvironment("CruiseControl", 10, 2020, "cpu", n_agents=3)
     check_env_specs(env)
 
     create_env_fn = lambda: HierarcialEnvironment(
@@ -92,7 +90,7 @@ if __name__ == "__main__":
         n_agents=10,
     )
 
-    policy = TensorDictModule(nn.Linear(30, 10), in_keys=["cars", "observations"], out_keys=["cars", "action"])
+    policy = TensorDictModule(nn.Linear(30, 10), in_keys=["agents", "observations"], out_keys=["agents", "action"])
 
     collector = SyncDataCollector(
         create_env_fn=create_env_fn,
@@ -107,7 +105,7 @@ if __name__ == "__main__":
     )
 
     for i, data in enumerate(collector):
-        print("👉", data)
+        print("👉", data["next"][env.reward_key])
         if i > 3:
             break
     

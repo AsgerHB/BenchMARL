@@ -30,7 +30,6 @@ class HierarchialTask(Task):
     ) -> Callable[[], EnvBase]:
         return lambda: HierarcialEnvironment(
             scenario=self.name.lower(),
-            num_envs=num_envs,  # Number of vectorized envs (do not use this param if the env is not vectorized)
             seed=seed,
             device=device,
             **self.config,  # Pass the loaded config (this is what is in your yaml
@@ -55,7 +54,7 @@ class HierarchialTask(Task):
     def group_map(self, env: EnvBase) -> Dict[str, List[str]]:
         # The group map mapping group names to agent names
         # The data in the tensordict will havebe presented this way
-        return {"cars": [car["name"] for car in env.cars]}
+        return {"agents": [car["name"] for car in env.agents]}
 
     def observation_spec(self, env: EnvBase) -> CompositeSpec:
         # A spec for the observation.
