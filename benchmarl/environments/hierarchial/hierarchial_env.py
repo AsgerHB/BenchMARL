@@ -23,20 +23,28 @@ class HierarcialEnvironment(EnvBase):
         self.n_agents = config["n_agents"]
         self.agents = [ {"name": f"Car{i}"} for i in range(1, self.n_agents + 1)]
 
-        action_spec = DiscreteTensorSpec(n=3, shape=[self.n_agents, 1], dtype=torch.float32)
+        action_spec = DiscreteTensorSpec(n=3, shape=[self.n_agents], dtype=torch.float32)
 
         # If provided, must be a CompositeSpec with one (group_name, "action") entry per group.
-        self.full_action_spec = CompositeSpec({("agents", "action"): action_spec})
+        self.full_action_spec = CompositeSpec({
+                "agents": CompositeSpec({"action": action_spec}, shape=[self.n_agents])
+            })
 
         observation_spec = UnboundedContinuousTensorSpec(shape=[self.n_agents, 3], dtype=torch.float32)
 
         # Must be a CompositeSpec with one (group_name, observation_key) entry per group.
-        self.full_observation_spec = CompositeSpec({("agents", "observations"): observation_spec}, shape=[self.n_agents])
+        self.full_observation_spec = CompositeSpec({
+                "agents": CompositeSpec({"observations": observation_spec}, shape=[self.n_agents])
+            })
 
         
-        reward_spec = UnboundedContinuousTensorSpec(shape=[self.n_agents], dtype=torch.float32)
+        reward_spec = UnboundedContinuousTensorSpec(shape=[self.n_agents, 1], dtype=torch.float32)
 
-        self.full_reward_spec = CompositeSpec({("agents", "reward"): reward_spec})
+        self.full_reward_spec = CompositeSpec({
+                "agents": CompositeSpec({"reward": reward_spec}, shape=[self.n_agents])
+            })
+
+        self.done_spec = DiscreteTensorSpec(n=2, shape=[1], dtype=torch.bool)
 
     def _reset(self, tensordict, **kwargs):
         # There are n_agents + 1 agents, because the first car is uncontrollable. That means n_agents distance and n_agents + 1 velocities.
@@ -53,7 +61,7 @@ class HierarcialEnvironment(EnvBase):
         return TensorDict({
             "agents": TensorDict({
                 "observations": obsrvations,
-            }),
+            }, batch_size=self.n_agents),
         })
     
     def _step(self, tensordict):
