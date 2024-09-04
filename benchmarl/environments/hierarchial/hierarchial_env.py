@@ -71,14 +71,17 @@ class HierarcialEnvironment(EnvBase):
         observations = tensordict["agents", "observations"]
         new_observations = torch.clone(observations)
         new_observations[:, 2] += actions.flatten()
-        reward = new_observations[:, 2]
+        new_observations[:, 0] += 1
+        reward = new_observations[:, 2].unsqueeze(-1)
+
+        done = new_observations[1, 0] > 100
 
         return  TensorDict({
             "agents": TensorDict({
                 "observations": new_observations,
                 "reward" : reward,
-            }),
-            "done": False
+            }, batch_size=self.n_agents),
+            "done": done
         })
 
     def _set_seed(self, seed):
