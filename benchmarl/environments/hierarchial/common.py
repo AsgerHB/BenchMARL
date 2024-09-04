@@ -31,10 +31,8 @@ class HierarchialTask(Task):
         return lambda: HierarcialEnvironment(
             scenario=self.name.lower(),
             num_envs=num_envs,  # Number of vectorized envs (do not use this param if the env is not vectorized)
-            continuous_actions=continuous_actions,  # Ignore this param if your env does not have this choice
             seed=seed,
             device=device,
-            categorical_actions=True,  # If your env has discrete actions, they need to be categorical (TorchRL can help with this)
             **self.config,  # Pass the loaded config (this is what is in your yaml
         )
 
