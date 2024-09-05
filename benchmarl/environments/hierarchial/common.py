@@ -13,6 +13,7 @@ from tensordict import TensorDictBase
 from torchrl.data import CompositeSpec
 from torchrl.envs import EnvBase
 from benchmarl.environments.hierarchial.hierarchial_env import HierarcialEnvironment
+from torchrl.envs import TransformedEnv, StepCounter
 
 class HierarchialTask(Task):
     # Your task names.
@@ -28,11 +29,14 @@ class HierarchialTask(Task):
         seed: Optional[int],
         device: DEVICE_TYPING,
     ) -> Callable[[], EnvBase]:
-        return lambda: HierarcialEnvironment(
-            scenario=self.name.lower(),
-            seed=seed,
-            device=device,
-            **self.config,  # Pass the loaded config (this is what is in your yaml
+        return lambda: TransformedEnv(
+            HierarcialEnvironment(
+                scenario=self.name.lower(),
+                seed=seed,
+                device=device,
+                **self.config,  # Pass the loaded config (this is what is in your yaml
+            ),
+            StepCounter(max_steps=100)
         )
 
     def supports_continuous_actions(self) -> bool:
