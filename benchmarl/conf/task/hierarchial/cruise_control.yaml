@@ -3,3 +3,11 @@ defaults:
   - _self_
 
 n_agents: 10
+
+t_act: 1.0          # Period between actions
+distance_min: 0.0
+distance_max: 200.0
+v_min: -10.0
+v_max: 20.0
+
+safety_violation_penalty: 100.0

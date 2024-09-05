@@ -10,3 +10,9 @@ from dataclasses import dataclass, MISSING
 @dataclass
 class TaskConfig:
     n_agents: int = MISSING
+    t_act: float = MISSING
+    distance_min: float = MISSING
+    distance_max: float = MISSING
+    v_min: float = MISSING
+    v_max: float = MISSING
+    safety_violation_penalty: float = MISSING
