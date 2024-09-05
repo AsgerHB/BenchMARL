@@ -4,6 +4,7 @@ from torchrl.envs import EnvBase
 from torchrl.data import DiscreteTensorSpec, CompositeSpec, UnboundedContinuousTensorSpec
 from tensordict import TensorDict
 from torchrl.envs import TransformedEnv, StepCounter
+import matplotlib.pyplot as plt
 
 # Debug stuff
 import random
@@ -102,9 +103,8 @@ class HierarcialEnvironment(EnvBase):
         safety_violation = crash.logical_or(fall_behind)
 
         reward = new_observations[:, 2]
-
-        # saefty_violation bool vector used in the C-style so it is 0 if false and 1 if true
         reward += safety_violation*torch.full([self.n_agents], self.safety_violation_penalty)
+        reward = reward.unsqueeze(-1)
         
         return  TensorDict({
             "agents": TensorDict({
@@ -117,6 +117,7 @@ class HierarcialEnvironment(EnvBase):
     def _set_seed(self, seed):
         rng = torch.manual_seed(seed)
         self.rng = rng
+
 
     def random_front_behaviour(self):
         random_variable = torch.rand(1).item()
