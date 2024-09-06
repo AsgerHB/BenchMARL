@@ -104,7 +104,7 @@ class HierarcialEnvironment(EnvBase):
         fall_behind = new_observations[:, 2] > self.distance_max
         safety_violation = crash.logical_or(fall_behind)
 
-        reward = new_observations[:, 2]
+        reward = new_observations[:, 2].clone()
         reward += safety_violation*torch.full([self.n_agents], self.safety_violation_penalty)
         reward = reward.unsqueeze(-1)
         
@@ -115,6 +115,7 @@ class HierarcialEnvironment(EnvBase):
             }, batch_size=self.n_agents),
             "done": False
         })
+
 
     def _set_seed(self, seed):
         rng = torch.manual_seed(seed)
@@ -168,10 +169,11 @@ class HierarcialEnvironment(EnvBase):
             return 2 # forwards
 
     def apply_action(self, velocity, action):
+        velocity = velocity.clone()
         if action == 0: # backwards
             velocity -= 2
         elif action == 1: # neutral
-            pass  # No change
+            pass
         elif action == 2: # forwards
             velocity += 2
         else:
@@ -188,7 +190,7 @@ class HierarcialEnvironment(EnvBase):
             new_velocity[i + 1] = self.apply_action(velocity[i + 1], action)
 
         new_velocity_difference = new_velocity[:-1] - new_velocity[1:]
-        new_distance = distance + ((velocity_difference + new_velocity_difference) / 2) * self.t_act
+        new_distance = distance.clone() + ((velocity_difference + new_velocity_difference) / 2) * self.t_act
         return new_velocity, new_distance
 
 if __name__ == "__main__":
