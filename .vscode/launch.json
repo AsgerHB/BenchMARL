@@ -11,7 +11,7 @@
             "program": "benchmarl/run.py",
             "console": "integratedTerminal",
             //"args": "${command:pickArgs}"
-            "args": "algorithm=mappo task=hierarchial/cruise_control",
+            "args": "algorithm=mappo task=hierarchial/cruise_control  experiment.on_policy_collected_frames_per_batch=100 experiment.max_n_frames=1000 experiment.evaluation_interval=200 experiment.checkpoint_interval=1000 experiment.loggers='[csv]'",
             // "justMyCode": false
         },
         {
@@ -21,7 +21,7 @@
             "program": "benchmarl/run.py",
             "console": "integratedTerminal",
             //"args": "${command:pickArgs}"
-            "args": "algorithm=mappo task=vmas/balance",
+            "args": "algorithm=mappo task=vmas/balance  experiment.on_policy_collected_frames_per_batch=100 experiment.max_n_frames=1000 experiment.evaluation_interval=200 experiment.checkpoint_interval=1000 experiment.loggers='[csv]'",
             // "justMyCode": false
         },
         {
