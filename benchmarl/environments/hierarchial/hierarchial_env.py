@@ -140,8 +140,7 @@ class HierarcialEnvironment(EnvBase):
 
     def render(self, tensordict, mode="rgb_array"):
         car_width = 20
-        reward = tensordict["agents", "reward"]
-        pretty_reward = [round(r) for r in reward.squeeze().tolist()]
+        reward = tensordict.get(("agents", "reward"), default=None)
         observations = tensordict["agents", "observations"]
         uncontrollable_car_velocity = observations[0][1]
         distances = observations[:, 2]
@@ -154,14 +153,17 @@ class HierarcialEnvironment(EnvBase):
         colors.insert(0, "b") # First car is blue
 
         info_text = f"Uncontrollable car velocity:\n{uncontrollable_car_velocity}\n\n"
-        info_text += f"Immediate reward: \n{pretty_reward}\n\n"
+        info_text += f"Velocities:\n{observations[:, 0].tolist()}\n\n"
+        if reward != None:
+            pretty_reward = [round(r) for r in reward.squeeze().tolist()]
+            info_text += f"Immediate reward: \n{pretty_reward}\n\n"
 
         plt.ioff()
         fig, ax = plt.subplots()
         ax.set_xlim(-50, self.distance_max*self.n_agents*1.5)
         ax.set_ylim(0, 1)
         plt.title("Agent Position in Environment")
-        plt.text(0, 0.85, info_text, verticalalignment="top")
+        plt.text(0, 0.95, info_text, verticalalignment="top")
         ax.axes.get_yaxis().set_visible(False)
 
         # Mainmatter
