@@ -49,7 +49,7 @@ class HierarchialTask(Task):
 
     def has_render(self, env: EnvBase) -> bool:
         # Does the env have a env.render(mode="rgb_array") or env.render() function?
-        return False
+        return True
 
     def max_steps(self, env: EnvBase) -> int:
         # Maximum number of steps for a rollout during evaluation

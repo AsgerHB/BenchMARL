@@ -5,6 +5,8 @@ from torchrl.data import DiscreteTensorSpec, CompositeSpec, UnboundedContinuousT
 from tensordict import TensorDict
 from torchrl.envs import TransformedEnv, StepCounter
 import matplotlib.pyplot as plt
+import io
+import numpy as np
 
 # Debug stuff
 import random
@@ -118,6 +120,43 @@ class HierarcialEnvironment(EnvBase):
         rng = torch.manual_seed(seed)
         self.rng = rng
 
+    def render(self, tensordict, mode="rgb_array"):
+
+        car_width = 0.1
+        observations = tensordict["agents", "observations"]
+        distances = observations[:, 2]
+        positions = [0]
+        for distance in distances:
+            positions.append(positions[-1] + distance + car_width)
+        ys = [0.5 for _ in positions]
+
+        plt.ioff()
+        fig, ax = plt.subplots()
+        plt.plot(positions, ys, "ro")
+        ax.set_xlim(-50, self.distance_max*self.n_agents*1.5)
+        ax.set_ylim(0, 1)
+        plt.title("Agent Position in Environment")
+        ax.axes.get_yaxis().set_visible(False)
+
+        if mode == "rgb_array":
+            with io.BytesIO() as buff:
+                fig.savefig(buff, format='rgba')
+                buff.seek(0)
+                data = np.frombuffer(buff.getvalue(), dtype=np.uint8) # (w*h,)
+
+            w, h = fig.canvas.get_width_height()
+            plt.close(fig)
+
+            im = data.reshape((int(h), int(w), -1)) # (w, h, 4)
+            im = im[:, :, :3]                       # (w, h, 3); discard alpha
+            im = torch.tensor(im)
+
+            return im
+        elif mode == "debug":
+            plt.show()
+        else:
+            raise NotImplemented()
+
 
     def random_front_behaviour(self):
         random_variable = torch.rand(1).item()
@@ -153,7 +192,7 @@ class HierarcialEnvironment(EnvBase):
         return new_velocity, new_distance
 
 if __name__ == "__main__":
-
+    # Creating the env
     n_agents = 4
     create_env_fn = lambda: TransformedEnv(
         HierarcialEnvironment(
@@ -174,15 +213,28 @@ if __name__ == "__main__":
     )
 
     env = create_env_fn()
-    #check_env_specs(env)
+    check_env_specs(env)
 
-    policy = TensorDictModule(nn.Linear(30, 10), in_keys=["agents", "observations"], out_keys=["agents", "action"])
+    # Take some steps manually
+    s = env.reset()
+    for _ in range(0, 100):
+        s = env.rand_action(s)
+        s = env.step(s)
+        s = s["next"]
 
+    # Check render function
+    env.render(s, mode="debug")
+
+
+    # Can't recall what this is.
+    policy = TensorDictModule(nn.Linear(30, 10), in_keys=["agents", "observations"], out_keys=["agents", "action"]) 
+
+    # Do some rollouts
     collector = SyncDataCollector(
         create_env_fn=create_env_fn,
         policy=None,
-        frames_per_batch=500,
-        total_frames=500*10,
+        frames_per_batch=100,
+        total_frames=100,
         init_random_frames=-1,
         reset_at_each_iter=False,
         device="cpu",

@@ -296,7 +296,7 @@ class Task(Enum):
     @staticmethod
     def render_callback(experiment, env: EnvBase, data: TensorDictBase):
         try:
-            return env.render(mode="rgb_array")
+            return env.render(data, mode="rgb_array")
         except TypeError:
             return env.render()
 
