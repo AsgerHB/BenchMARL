@@ -104,7 +104,7 @@ class HierarcialEnvironment(EnvBase):
         fall_behind = new_observations[:, 2] > self.distance_max
         safety_violation = crash.logical_or(fall_behind)
 
-        reward = new_observations[:, 2].clone()
+        reward = new_observations[:, 2].clone()*0.1
         reward += safety_violation*torch.full([self.n_agents], self.safety_violation_penalty)
         reward = reward.unsqueeze(-1)
         
@@ -209,7 +209,7 @@ if __name__ == "__main__":
             distance_max=200.0,
             v_min=-10.0,
             v_max=20.0,
-            safety_violation_penalty=100.0,
+            safety_violation_penalty=10.0,
         ),
         StepCounter(max_steps=100)
     )
