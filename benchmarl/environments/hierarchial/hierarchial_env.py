@@ -45,7 +45,7 @@ class HierarcialEnvironment(EnvBase):
                 "agents": CompositeSpec({"action": action_spec}, shape=[self.n_agents])
             })
 
-        observation_spec = UnboundedContinuousTensorSpec(shape=[self.n_agents, 3], dtype=torch.float32)
+        observation_spec = UnboundedContinuousTensorSpec(shape=[self.n_agents, 4], dtype=torch.float32)
 
         # Must be a CompositeSpec with one (group_name, observation_key) entry per group.
         self.full_observation_spec = CompositeSpec({
@@ -71,7 +71,9 @@ class HierarcialEnvironment(EnvBase):
 
         distance = torch.tensor([50 for car in range(1, self.n_agents + 1)])
 
-        obsrvations = torch.stack([velocity_ego, velocity_front, distance], dim=1)
+        damaged = torch.zeros(self.n_agents, dtype=torch.float32)
+
+        obsrvations = torch.stack([velocity_ego, velocity_front, distance, damaged], dim=1)
 
         return TensorDict({
             "agents": TensorDict({
@@ -88,22 +90,37 @@ class HierarcialEnvironment(EnvBase):
         velocity_ego = observations[:, 0]
         velocity_front = observations[:, 1]
         distance = observations[:, 2]
+        damaged = observations[:, 3]
 
         # Combine the velocities back into a single tensor of shape (n_agents + 1)
         velocity = torch.zeros(self.n_agents + 1, dtype=torch.float32)
         velocity[1:] = velocity_ego
         velocity[0:self.n_agents] = velocity_front
 
-        new_velocity, new_distance = self.simulate_point(velocity, distance, actions)
+        # The actual update
+        new_velocity, new_distance = self.simulate_point(velocity, distance, damaged, actions)
 
+        # Split updated velocities into observations
         new_velocity_ego = torch.narrow(new_velocity, 0, 1, self.n_agents)
         new_velocity_front = torch.narrow(new_velocity, 0, 0, self.n_agents)
-        new_observations = torch.stack([new_velocity_ego, new_velocity_front, new_distance], dim=1)
 
-        crash = new_observations[:, 2] < self.distance_min
-        fall_behind = new_observations[:, 2] > self.distance_max
+        # Compute safety violations
+        crash = new_distance < self.distance_min
+        fall_behind = new_distance > self.distance_max
         safety_violation = crash.logical_or(fall_behind)
 
+        # Apply damage to cars
+        new_damaged = damaged.clone()
+        for i, c in enumerate(crash):
+            if c:
+                new_damaged[i] = 1
+                if i == 0:
+                    continue
+                new_damaged[i - 1] = 1
+
+        new_observations = torch.stack([new_velocity_ego, new_velocity_front, new_distance, new_damaged], dim=1)
+
+        # Reward
         reward = new_observations[:, 2].clone()*0.1
         reward += safety_violation*torch.full([self.n_agents], self.safety_violation_penalty)
         reward = reward.unsqueeze(-1)
@@ -122,22 +139,33 @@ class HierarcialEnvironment(EnvBase):
         self.rng = rng
 
     def render(self, tensordict, mode="rgb_array"):
-
-        car_width = 0.1
+        car_width = 20
+        reward = tensordict["agents", "reward"]
+        pretty_reward = [round(r) for r in reward.squeeze().tolist()]
         observations = tensordict["agents", "observations"]
+        uncontrollable_car_velocity = observations[0][1]
         distances = observations[:, 2]
+        damages = observations[:, 3]
         positions = [0]
         for distance in distances:
             positions.append(positions[-1] + distance + car_width)
         ys = [0.5 for _ in positions]
+        colors = ["r" if damaged else "b" for damaged in damages]
+        colors.insert(0, "b") # First car is blue
+
+        info_text = f"Uncontrollable car velocity:\n{uncontrollable_car_velocity}\n\n"
+        info_text += f"Immediate reward: \n{pretty_reward}\n\n"
 
         plt.ioff()
         fig, ax = plt.subplots()
-        plt.plot(positions, ys, "ro")
         ax.set_xlim(-50, self.distance_max*self.n_agents*1.5)
         ax.set_ylim(0, 1)
         plt.title("Agent Position in Environment")
+        plt.text(0, 0.85, info_text, verticalalignment="top")
         ax.axes.get_yaxis().set_visible(False)
+
+        # Mainmatter
+        plt.scatter(positions, ys, marker="<", color=colors)
 
         if mode == "rgb_array":
             with io.BytesIO() as buff:
@@ -153,8 +181,10 @@ class HierarcialEnvironment(EnvBase):
             im = torch.tensor(im)
 
             return im
-        elif mode == "debug":
+        elif mode == "window":
             plt.show()
+        elif mode == "plt":
+            return plt
         else:
             raise NotImplemented()
 
@@ -168,29 +198,35 @@ class HierarcialEnvironment(EnvBase):
         else:
             return 2 # forwards
 
-    def apply_action(self, velocity, action):
-        velocity = velocity.clone()
-        if action == 0: # backwards
-            velocity -= 2
-        elif action == 1: # neutral
-            pass
-        elif action == 2: # forwards
-            velocity += 2
-        else:
-            raise RuntimeError(f"Unexpected action {action}")
+    def apply_action(self, velocity, damaged, action):
+        if not damaged:
+            if action == 0: # backwards
+                velocity -= 2
+            elif action == 1: # neutral
+                pass
+            elif action == 2: # forwards
+                velocity += 2
+            else:
+                raise RuntimeError(f"Unexpected action {action}")
+        else: # Emergency stop
+            if velocity < 0:
+                velocity += 2
+            elif velocity > 0:
+                velocity -= 2
         return torch.clamp(velocity, self.v_min, self.v_max)
 
-    def simulate_point(self, velocity, distance, actions):
+    def simulate_point(self, velocity, distance, damaged, actions):
         velocity_difference = velocity[:-1] - velocity[1:]
         new_velocity = velocity.clone()
         front_action = self.random_front_behaviour()
-        new_velocity[0] = self.apply_action(velocity[0], front_action)
+        new_velocity[0] = self.apply_action(velocity[0].clone(), 0, front_action) # Front car doesn't get damaged. Because it would be bothersome to implement.
 
         for i, action in enumerate(actions):
-            new_velocity[i + 1] = self.apply_action(velocity[i + 1], action)
+            new_velocity[i + 1] = self.apply_action(velocity[i + 1].clone(), damaged[i], action)
 
         new_velocity_difference = new_velocity[:-1] - new_velocity[1:]
         new_distance = distance.clone() + ((velocity_difference + new_velocity_difference) / 2) * self.t_act
+        new_distance = torch.maximum(new_distance, torch.full(size=[self.n_agents], fill_value=self.distance_min - 1))
         return new_velocity, new_distance
 
 if __name__ == "__main__":
@@ -219,14 +255,12 @@ if __name__ == "__main__":
 
     # Take some steps manually
     s = env.reset()
-    for _ in range(0, 100):
+    for i in range(0, 100):
         s = env.rand_action(s)
         s = env.step(s)
         s = s["next"]
-
-    # Check render function
-    env.render(s, mode="debug")
-
+        if i%2 == 0:
+            env.render(s, mode="window")
 
     # Can't recall what this is.
     policy = TensorDictModule(nn.Linear(30, 10), in_keys=["agents", "observations"], out_keys=["agents", "action"]) 
@@ -236,7 +270,7 @@ if __name__ == "__main__":
         create_env_fn=create_env_fn,
         policy=None,
         frames_per_batch=100,
-        total_frames=100,
+        total_frames=100*4,
         init_random_frames=-1,
         reset_at_each_iter=False,
         device="cpu",
