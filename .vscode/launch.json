@@ -15,6 +15,16 @@
             // "justMyCode": false
         },
         {
+            "name": "pdb Cruise Control with MAPPO (A few more episodes)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "benchmarl/run.py",
+            "console": "integratedTerminal",
+            //"args": "${command:pickArgs}"
+            "args": "algorithm=mappo task=hierarchial/cruise_control  experiment.on_policy_collected_frames_per_batch=600 experiment.max_n_frames=60000 experiment.evaluation_interval=12000 experiment.checkpoint_interval=12000 experiment.loggers='[csv]'",
+            // "justMyCode": false
+        },
+        {
             "name": "pdb VMAS Balance with MAPPO",
             "type": "debugpy",
             "request": "launch",
@@ -29,7 +39,8 @@
             "type": "debugpy",
             "request": "launch",
             "program": "${file}",
-            "console": "integratedTerminal"
+            "console": "integratedTerminal",
+            // "justMyCode": false
         }
     ]
 }
