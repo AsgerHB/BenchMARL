@@ -194,6 +194,14 @@ class Logger:
                     f"eval/{group}/reward/episode_reward_max": max(returns),
                 }
             )
+            fraction_safe = self._get_fraction_safe(rollouts)
+            if fraction_safe != None:
+                to_log.update(
+                    {
+                        f"eval/{group}/fraction_safe": fraction_safe
+                    }
+                )
+
 
         mean_group_return = torch.stack(
             [value for key, value in json_metrics.items()], dim=0
@@ -287,6 +295,17 @@ class Logger:
         else:
             episode_reward = td.get(("next", group, "episode_reward"))
         return episode_reward.mean(-2) if remove_agent_dim else episode_reward
+
+    def _get_fraction_safe(self, rollouts):
+        if self.task_name == "cruise_control":
+            # Count the number of safety violating agents.
+            # [-1, :, 3] is the last "damaged" state for each agent in the rollout. (Shape is (100, n_agents, 4) )
+            unsafe = sum([any(td["agents", "observations"][-1, :, 3]) for td in rollouts])
+            total = len(rollouts)
+            safe = total - unsafe
+            return safe/total
+        else:
+            return None
 
 
 class JsonWriter:
