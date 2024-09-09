@@ -122,7 +122,8 @@ class HierarcialEnvironment(EnvBase):
 
         # Reward
         reward = new_observations[:, 2].clone()*0.1
-        reward += safety_violation*torch.full([self.n_agents], self.safety_violation_penalty)
+        reward = -reward
+        reward -= safety_violation*torch.full([self.n_agents], self.safety_violation_penalty)
         reward = reward.unsqueeze(-1)
         
         return  TensorDict({
