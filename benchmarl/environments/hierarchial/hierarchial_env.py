@@ -33,7 +33,7 @@ class HierarcialEnvironment(EnvBase):
         self.distance_max = config["distance_max"]
         self.v_min = config["v_min"]
         self.v_max = config["v_max"]
-
+        self.initial_distance = config["initial_distance"]
         self.safety_violation_penalty = config["safety_violation_penalty"]
         
         self.agents = [ {"name": f"Car{i}"} for i in range(1, self.n_agents + 1)]
@@ -69,7 +69,7 @@ class HierarcialEnvironment(EnvBase):
         velocity_ego = torch.narrow(velocity, 0, 1, self.n_agents)
         velocity_front = torch.narrow(velocity, 0, 0, self.n_agents)
 
-        distance = torch.tensor([50 for car in range(1, self.n_agents + 1)])
+        distance = torch.tensor([self.initial_distance for car in range(1, self.n_agents + 1)])
 
         damaged = torch.zeros(self.n_agents, dtype=torch.float32)
 
@@ -161,7 +161,7 @@ class HierarcialEnvironment(EnvBase):
 
         plt.ioff()
         fig, ax = plt.subplots()
-        ax.set_xlim(-50, self.distance_max*self.n_agents*1.5)
+        ax.set_xlim(-50, self.initial_distance*self.n_agents*2.5)
         ax.set_ylim(0, 1)
         plt.title("Agent Position in Environment")
         plt.text(0, 0.95, info_text, verticalalignment="top")
@@ -241,13 +241,14 @@ if __name__ == "__main__":
             seed=random.randint(0, 9999999999),
             device="cpu",
 
-            # config 👇
+            # config 👇 TODO: I think there's a get_from_yaml() function I could use.
             n_agents=n_agents,
             t_act=1.0,
             distance_min=0.0,
             distance_max=200.0,
             v_min=-10.0,
             v_max=20.0,
+            initial_distance=50.0,
             safety_violation_penalty=10.0,
         ),
         StepCounter(max_steps=100)

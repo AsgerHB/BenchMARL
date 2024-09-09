@@ -9,5 +9,6 @@ distance_min: 0.0
 distance_max: 200.0
 v_min: -10.0
 v_max: 20.0
+initial_distance: 50.0
 
 safety_violation_penalty: 10.0

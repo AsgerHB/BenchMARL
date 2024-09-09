@@ -15,4 +15,5 @@ class TaskConfig:
     distance_max: float = MISSING
     v_min: float = MISSING
     v_max: float = MISSING
+    initial_distance: float = MISSING
     safety_violation_penalty: float = MISSING
