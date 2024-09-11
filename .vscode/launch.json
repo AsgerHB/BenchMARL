@@ -11,7 +11,7 @@
             "program": "benchmarl/run.py",
             "console": "integratedTerminal",
             //"args": "${command:pickArgs}"
-            "args": "algorithm=mappo task=hierarchial/cruise_control  experiment.on_policy_collected_frames_per_batch=100 experiment.max_n_frames=400 experiment.evaluation_interval=200 experiment.checkpoint_interval=1000 experiment.loggers='[csv]' experiment.evaluation_episodes=50",
+            "args": "algorithm=mappo task=hierarchial/cruise_control task.n_agents=4 experiment.on_policy_collected_frames_per_batch=1000 experiment.max_n_frames=3000 experiment.evaluation_interval=1000 experiment.checkpoint_interval=3000 experiment.loggers='[csv]' experiment.evaluation_episodes=30",
             // "justMyCode": false
         },
         {
@@ -21,7 +21,7 @@
             "program": "benchmarl/run.py",
             "console": "integratedTerminal",
             //"args": "${command:pickArgs}"
-            "args": "algorithm=mappo task=hierarchial/cruise_control  experiment.on_policy_collected_frames_per_batch=100 experiment.max_n_frames=100000 experiment.evaluation_interval=10000 experiment.checkpoint_interval=10000 experiment.loggers='[csv]' experiment.evaluation_episodes=1000",
+            "args": "algorithm=mappo task=hierarchial/cruise_control  experiment.on_policy_collected_frames_per_batch=1000 experiment.max_n_frames=100000 experiment.evaluation_interval=10000 experiment.checkpoint_interval=10000 experiment.loggers='[csv]' experiment.evaluation_episodes=1000",
             // "justMyCode": false
         },
         {
