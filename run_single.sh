@@ -15,8 +15,7 @@ python benchmarl/run.py algorithm=mappo task=hierarchial/cruise_control \
     experiment.evaluation_episodes=400 \
     experiment.train_device=cuda \
     experiment.buffer_device=cuda \
-    experiment.save_folder="$results_dir" \
-    experiment.lr=0.00001
+    experiment.save_folder="$results_dir"
 
 echo "Experiment ended"
 date
