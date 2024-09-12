@@ -118,11 +118,13 @@ First, the main result of the notebook:
 subdirs = let
 	subdirs = readdir(results_base_path)
 	subdirs = filter(d -> isdir(joinpath(results_base_path, d)), subdirs)
+	
+	# There's an annoying hash of some kind in the middle of the folder name, that fucks up sorting. So this comparison function strips out that hash before applying naturalsort.
 	annoying_hash_re = r"__\w+"
 	
 	lt(a, b) = natural(
-		replace(a, annoying_hash_re => ""), 
-		replace(b, annoying_hash_re => ""))
+		replace(b, annoying_hash_re => ""), 
+		replace(a, annoying_hash_re => ""))
 	
 	subdirs = sort(subdirs; lt)
 end
