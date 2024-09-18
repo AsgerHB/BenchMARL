@@ -5,20 +5,14 @@ date
 
 source venv/bin/activate
 
-seed=$RANDOM
 results_dir="$HOME/Results/N-player\ CC\ MAPPO"
 python benchmarl/run.py algorithm=mappo task=hierarchial/cruise_control \
-    experiment.on_policy_collected_frames_per_batch=1000 \
-    experiment.max_n_frames=20000 \
-    experiment.evaluation_interval=5000 \
-    experiment.checkpoint_interval=5000 \
     experiment.loggers="[csv]" \
-    experiment.evaluation_episodes=400 \
     experiment.train_device=cuda \
     experiment.buffer_device=cuda \
     experiment.save_folder="$results_dir" \
-    task.safety_violation_penalty=200 \
-    seed=$seed
+    task.safety_violation_penalty=1600 \
+    seed=$RANDOM
 
 echo "Experiment ended"
 date
