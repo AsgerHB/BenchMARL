@@ -191,15 +191,21 @@ class HierarcialEnvironment(EnvBase):
         else:
             raise NotImplemented()
 
+    # Probability weights of front action, which depend on front's speed.
+    weights_111 = torch.tensor([1, 1, 1], dtype=torch.float32) # Equal weight
+    weights_211 = torch.tensor([2, 1, 1], dtype=torch.float32) # Backwards more likely
+    weights_112 = torch.tensor([1, 1, 2], dtype=torch.float32) # Forwards more likely
 
-    def random_front_behaviour(self):
-        random_variable = torch.rand(1).item()
-        if random_variable < 1/3:
-            return 0 # backwards
-        elif random_variable < 2/3:
-            return 1 # neutral
+    def random_front_behaviour(self, front_velocity):
+        if front_velocity < 0:
+            weights = HierarcialEnvironment.weights_112
+        elif front_velocity > 10:
+            weights = HierarcialEnvironment.weights_211
         else:
-            return 2 # forwards
+            weights = HierarcialEnvironment.weights_111
+
+        return torch.multinomial(weights, 1).item()
+
 
     def apply_action(self, velocity, damaged, action):
         if not damaged:
@@ -221,7 +227,7 @@ class HierarcialEnvironment(EnvBase):
     def simulate_point(self, velocity, distance, damaged, actions):
         velocity_difference = velocity[:-1] - velocity[1:]
         new_velocity = velocity.clone()
-        front_action = self.random_front_behaviour()
+        front_action = self.random_front_behaviour(velocity[0])
         new_velocity[0] = self.apply_action(velocity[0].clone(), 0, front_action) # Front car doesn't get damaged. Because it would be bothersome to implement.
 
         for i, action in enumerate(actions):
