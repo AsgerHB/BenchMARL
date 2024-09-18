@@ -120,11 +120,11 @@ subdirs = let
 	subdirs = filter(d -> isdir(joinpath(results_base_path, d)), subdirs)
 	
 	# There's an annoying hash of some kind in the middle of the folder name, that fucks up sorting. So this comparison function strips out that hash before applying naturalsort.
-	annoying_hash_re = r"__\w+"
+	annoying_hash_re = r"__[a-z0-9]+"
 	
 	lt(a, b) = natural(
-		replace(b, annoying_hash_re => ""), 
-		replace(a, annoying_hash_re => ""))
+		replace(a, annoying_hash_re => ""), 
+		replace(b, annoying_hash_re => ""))
 	
 	subdirs = sort(subdirs; lt)
 end
@@ -173,6 +173,9 @@ md"""
 #### Paths
 """
 
+# ╔═╡ 8203da18-aa29-4195-a7bb-6dc01302ac2d
+readdir(results_path)
+
 # ╔═╡ eed44f59-4f26-4b54-8b7c-e1443871d985
 json_path = glob("*cruise_control*.json", results_path)[1]
 
@@ -215,7 +218,7 @@ fraction_safe_plot = let
 	@df fraction_safe_total_frames bar(:total_frames, :fraction_safe,
 		xlabel="Training runs",
 		ylabel="Fraction of runs safe",
-		marker=:circle,
+		ylim=(0, 1),
 		linecolor=colors.PETER_RIVER,
 		linewidth=0,
 		color=colors.PETER_RIVER,
@@ -255,7 +258,8 @@ json_dict = JSON.parsefile(json_path)
 returns_dict = let
 	cruise_control = json_dict["hierarchial"]["cruise_control"]
 	first_algorithm_key = cruise_control |> keys |> first # e.g. "mappo"
-	returns = cruise_control[first_algorithm_key]["seed_0"]
+	seed_key = cruise_control[first_algorithm_key] |> keys |> first
+	returns = cruise_control[first_algorithm_key][seed_key]
 end
 
 # ╔═╡ 95dadefb-d459-4fd2-9ae4-5b95d988f733
@@ -301,6 +305,9 @@ end
 # ╔═╡ 0a9237d6-1adf-4a46-bff2-d3dd6d3b31c3
 [r["mean_agents_return"] for r in returns_with_means]
 
+# ╔═╡ 40b1ebe8-7a34-420d-8a78-8f1c39d43cdb
+[r["mean_agents_return"] for r in returns_with_means] |> maximum
+
 # ╔═╡ e7b82b75-2df2-413b-89d4-9a9987707df8
 performance_plot = let
 	mean_agent_returns = [r["mean_agents_return"] for r in returns_with_means]
@@ -328,9 +335,14 @@ performance_plot = let
 end
 
 # ╔═╡ 701b52ac-5871-4d2b-afdb-52422fefee0b
-plot(performance_plot, fraction_safe_plot, 
-	layout=(2, 1), 
-	size=(350, 400))
+plot(performance_plot, 
+	plot(performance_plot, ylim=(-10000, -1000)), 
+	fraction_safe_plot, 
+	layout=(3, 1), 
+	size=(460, 800))
+
+# ╔═╡ 8e1a2b4a-e5e2-48a0-bba6-6ae1554ec289
+plot(performance_plot, ylims=(-10000, -2000))
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -1913,6 +1925,7 @@ version = "1.4.1+1"
 # ╟─f5d5e2f9-4213-4bfd-a6e4-2c62a60b5304
 # ╟─d744a864-5f2f-43e8-8913-20af703095fc
 # ╟─49035f17-1c3f-4e60-8bb9-6eb678dc2acf
+# ╠═8203da18-aa29-4195-a7bb-6dc01302ac2d
 # ╠═eed44f59-4f26-4b54-8b7c-e1443871d985
 # ╠═14a164fe-eb04-4992-8db6-534198dcb866
 # ╠═c1aacc23-2191-4466-9c3d-0dafe15d5132
@@ -1932,6 +1945,8 @@ version = "1.4.1+1"
 # ╠═a67764fd-aaed-403b-a525-564609516265
 # ╠═739d6aa9-e848-4a26-8b2d-8b8d0b4c5e39
 # ╠═0a9237d6-1adf-4a46-bff2-d3dd6d3b31c3
+# ╠═40b1ebe8-7a34-420d-8a78-8f1c39d43cdb
 # ╠═e7b82b75-2df2-413b-89d4-9a9987707df8
+# ╠═8e1a2b4a-e5e2-48a0-bba6-6ae1554ec289
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
