@@ -1,0 +1,12 @@
+defaults:
+  - hierarchial_chemical_production_config
+  - _self_
+
+t_act: 2.5
+min_stored: 2
+max_stored: 50
+flow_rate: 2.65
+flow_variance: 0.5
+stored_initially: 11
+
+safety_violation_penalty: 100

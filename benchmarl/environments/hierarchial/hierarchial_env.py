@@ -13,6 +13,7 @@ import random
 from torchrl.collectors import SyncDataCollector
 from tensordict.nn import TensorDictModule
 from torch import nn
+from benchmarl.environments.common import Task
 
 import matplotlib.pyplot as plt
 
@@ -31,6 +32,12 @@ class HierarcialEnvironment(EnvBase):
             self._reset = self._cc_reset
             self._step = self._cc_step
             self.render = self._cc_render
+        elif scenario == "chemical_production":
+            self._cp_set_spec(config)
+            self._reset = self._cp_reset
+            self._step = self._cp_step
+            self.render = self._cp_render
+
         else:
             raise NotImplemented
             
@@ -42,6 +49,8 @@ class HierarcialEnvironment(EnvBase):
 
     def _set_seed(self, seed):
         self.rng = torch.manual_seed(seed)
+
+    #<editor-fold desc="Cruise Control">
 
     def _cc_set_spec(self, config):
         self.n_agents = config["n_agents"]
@@ -251,24 +260,155 @@ class HierarcialEnvironment(EnvBase):
         new_distance = torch.maximum(new_distance, torch.full(size=[self.n_agents], fill_value=self.distance_min - 1))
         return new_velocity, new_distance
 
-if __name__ == "__main__":
-    # Creating the env
-    n_agents = 4
-    create_env_fn = lambda: TransformedEnv(
-        HierarcialEnvironment(
-            scenario="cruise_control",
-            seed=random.randint(0, 9999999999),
-            device="cpu",
+    # </editor-fold>
 
-            # config 👇 TODO: I think there's a get_from_yaml() function I could use.
-            n_agents=n_agents,
+    #<editor-fold desc="Chemical Production">
+
+    def _cp_set_spec(self, config):
+        self.n_agents = 10 # The layout is hard-coded.
+        self.period = 2.5  # So is the period
+        self.t_act = config["t_act"]
+        self.min_stored = config["min_stored"]
+        self.max_stored = config["max_stored"]
+        self.flow_rate = config["flow_rate"]
+        self.flow_variance = config["flow_variance"]
+        self.stored_initially = config["stored_initially"]
+        self.safety_violation_penalty = config["safety_violation_penalty"]
+        
+        self.agents = [ {"name": f"Unit{i}"} for i in range(1, self.n_agents + 1)]
+
+        # Actions: CCO=0, COC=1, OCC=2, CCC=3,OOC=4, COO=5, OCO=6, OOO=7, 
+        # C: Closed, O: Open.
+        # I have no idea what the order is, but this is what the shield uses.
+        action_spec = DiscreteTensorSpec(n=8, shape=[self.n_agents], dtype=torch.float32)
+
+        # If provided, must be a CompositeSpec with one (group_name, "action") entry per group.
+        self.full_action_spec = CompositeSpec({
+                "agents": CompositeSpec({"action": action_spec}, shape=[self.n_agents])
+            })
+
+        # Observations are (v, t) where v is volume and t is periodic time (That is time between 0 and self.period; consumers and providers use this.)
+        observation_spec = UnboundedContinuousTensorSpec(shape=[self.n_agents, 2], dtype=torch.float32)
+
+        # Must be a CompositeSpec with one (group_name, observation_key) entry per group.
+        self.full_observation_spec = CompositeSpec({
+                "agents": CompositeSpec({"observations": observation_spec}, shape=[self.n_agents])
+            })
+
+        # Cost paid to provider this time-step.
+        reward_spec = UnboundedContinuousTensorSpec(shape=[self.n_agents, 1], dtype=torch.float32)
+
+        self.full_reward_spec = CompositeSpec({
+                "agents": CompositeSpec({"reward": reward_spec}, shape=[self.n_agents])
+            })
+
+        self.done_spec = DiscreteTensorSpec(n=2, shape=[1], dtype=torch.bool)
+
+    def _cp_reset(self, tensordict, **kwargs):
+        v = torch.full(fill_value=self.stored_initially, size=[self.n_agents], dtype=torch.float32)
+        t = torch.zeros(self.n_agents, dtype=torch.float32)
+
+        observations = torch.stack([v, t], dim=1)
+
+        return TensorDict({
+            "agents": TensorDict({
+                "observations": observations,
+            }, batch_size=self.n_agents)
+        })
+
+
+    def _cp_step(self, tensordict):
+        actions = tensordict["agents", "action"]
+        observations = tensordict["agents", "observations"]
+        v = observations[:, 0]
+        t = observations[:, 1]
+        
+        new_v = v + actions*self.t_act
+        new_t = (t + self.t_act)%self.period
+        new_observations = torch.stack([new_v, new_t], dim=1)
+
+        reward = actions - 4
+
+        return TensorDict({
+            "agents": TensorDict({
+                "observations": new_observations,
+                "reward": reward
+            }, batch_size=self.n_agents),
+            "done": False
+        })
+
+
+
+    def _cp_render(self, tensordict, mode="rgb_array"):
+        actions = tensordict["agents", "action"]
+        observations = tensordict["agents", "observations"]
+        v = observations[:, 0]
+        t = observations[:, 1]
+
+        info_text = "debug info goes here."
+
+        plt.ioff()
+        fig, ax = plt.subplots()
+        ax.set_xlim(0, self.n_agents)
+        ax.set_ylim(0, self.max_stored)
+        plt.title("This one's gonna be tough.")
+        plt.text(0, 0.95, info_text, verticalalignment="top")
+
+        # Mainmatter
+        plt.plot(v)
+        plt.plot(t)
+
+        if mode == "rgb_array":
+            with io.BytesIO() as buff:
+                fig.savefig(buff, format='rgba')
+                buff.seek(0)
+                data = np.frombuffer(buff.getvalue(), dtype=np.uint8) # (w*h,)
+
+            w, h = fig.canvas.get_width_height()
+            plt.close(fig)
+
+            im = data.reshape((int(h), int(w), -1)) # (w, h, 4)
+            im = im[:, :, :3]                       # (w, h, 3); discard alpha
+            im = torch.tensor(im)
+
+            return im
+        elif mode == "window":
+            plt.show()
+        elif mode == "plt":
+            return plt
+        else:
+            raise NotImplemented()
+
+    #</editor-fold>
+
+if __name__ == "__main__":
+    scenario = "chemical_production"
+    # Creating the env
+    cruise_control_config = dict(n_agents=4,
             t_act=1.0,
             distance_min=0.0,
             distance_max=200.0,
             v_min=-10.0,
             v_max=20.0,
             initial_distance=50.0,
-            safety_violation_penalty=10.0,
+            safety_violation_penalty=10.0,)
+    
+    chemical_production_config = dict(t_act=2.5,
+        min_stored=2,
+        max_stored=50,
+        flow_rate=2.65,
+        flow_variance=0.5,
+        stored_initially=11,
+        safety_violation_penalty=100,)
+
+    create_env_fn = lambda: TransformedEnv(
+        HierarcialEnvironment(
+            scenario=scenario,
+            seed=random.randint(0, 9999999999),
+            device="cpu",
+
+            # config 👇 TODO: I think there's a get_from_yaml() function I could use.
+            **(chemical_production_config if scenario == "chemical_production" else cruise_control_config)
         ),
         StepCounter(max_steps=100)
     )
@@ -281,9 +421,9 @@ if __name__ == "__main__":
     for i in range(0, 100):
         s = env.rand_action(s)
         s = env.step(s)
-        s = s["next"]
         if i%2 == 0:
             env.render(s, mode="window")
+        s = s["next"]
 
     # Can't recall what this is.
     policy = TensorDictModule(nn.Linear(30, 10), in_keys=["agents", "observations"], out_keys=["agents", "action"]) 
