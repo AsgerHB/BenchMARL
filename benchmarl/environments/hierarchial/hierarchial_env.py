@@ -26,7 +26,24 @@ class HierarcialEnvironment(EnvBase):
         super().__init__(device=device)
 
         self.set_seed(seed)
+        if scenario == "cruise_control":
+            self._cc_set_spec(config)
+            self._reset = self._cc_reset
+            self._step = self._cc_step
+            self.render = self._cc_render
+        else:
+            raise NotImplemented
+            
+    def _reset(self):
+        raise Exception("This function should have been replaced in constructor.")
 
+    def _step(self):
+        raise Exception("This function should have been replaced in constructor.")
+
+    def _set_seed(self, seed):
+        self.rng = torch.manual_seed(seed)
+
+    def _cc_set_spec(self, config):
         self.n_agents = config["n_agents"]
         self.t_act = config["t_act"]
         self.distance_min = config["distance_min"]
@@ -61,7 +78,7 @@ class HierarcialEnvironment(EnvBase):
 
         self.done_spec = DiscreteTensorSpec(n=2, shape=[1], dtype=torch.bool)
 
-    def _reset(self, tensordict, **kwargs):
+    def _cc_reset(self, tensordict, **kwargs):
         # There are n_agents + 1 agents, because the first car is uncontrollable. That means n_agents distance and n_agents + 1 velocities.
         
         velocity = torch.zeros(self.n_agents + 1, dtype=torch.float32)
@@ -81,7 +98,7 @@ class HierarcialEnvironment(EnvBase):
             }, batch_size=self.n_agents)
         })
     
-    def _step(self, tensordict):
+    def _cc_step(self, tensordict):
         #print("👉", tensordict["done"])
 
         actions = tensordict["agents", "action"]
@@ -98,7 +115,7 @@ class HierarcialEnvironment(EnvBase):
         velocity[0:self.n_agents] = velocity_front
 
         # The actual update
-        new_velocity, new_distance = self.simulate_point(velocity, distance, damaged, actions)
+        new_velocity, new_distance = self._cc_simulate_point(velocity, distance, damaged, actions)
 
         # Split updated velocities into observations
         new_velocity_ego = torch.narrow(new_velocity, 0, 1, self.n_agents)
@@ -135,11 +152,7 @@ class HierarcialEnvironment(EnvBase):
         })
 
 
-    def _set_seed(self, seed):
-        rng = torch.manual_seed(seed)
-        self.rng = rng
-
-    def render(self, tensordict, mode="rgb_array"):
+    def _cc_render(self, tensordict, mode="rgb_array"):
         car_width = 20
         reward = tensordict.get(("agents", "reward"), default=None)
         observations = tensordict["agents", "observations"]
@@ -204,10 +217,10 @@ class HierarcialEnvironment(EnvBase):
         else:
             weights = HierarcialEnvironment.weights_111
 
-        return torch.multinomial(weights, 1).item()
+        return torch.multinomial(weights, 1, generator=self.rng).item()
 
 
-    def apply_action(self, velocity, damaged, action):
+    def _cc_apply_action(self, velocity, damaged, action):
         if not damaged:
             if action == 0: # backwards
                 velocity -= 2
@@ -224,14 +237,14 @@ class HierarcialEnvironment(EnvBase):
                 velocity -= 2
         return torch.clamp(velocity, self.v_min, self.v_max)
 
-    def simulate_point(self, velocity, distance, damaged, actions):
+    def _cc_simulate_point(self, velocity, distance, damaged, actions):
         velocity_difference = velocity[:-1] - velocity[1:]
         new_velocity = velocity.clone()
         front_action = self.random_front_behaviour(velocity[0])
-        new_velocity[0] = self.apply_action(velocity[0].clone(), 0, front_action) # Front car doesn't get damaged. Because it would be bothersome to implement.
+        new_velocity[0] = self._cc_apply_action(velocity[0].clone(), 0, front_action) # Front car doesn't get damaged. Because it would be bothersome to implement.
 
         for i, action in enumerate(actions):
-            new_velocity[i + 1] = self.apply_action(velocity[i + 1].clone(), damaged[i], action)
+            new_velocity[i + 1] = self._cc_apply_action(velocity[i + 1].clone(), damaged[i], action)
 
         new_velocity_difference = new_velocity[:-1] - new_velocity[1:]
         new_distance = distance.clone() + ((velocity_difference + new_velocity_difference) / 2) * self.t_act
@@ -243,7 +256,7 @@ if __name__ == "__main__":
     n_agents = 4
     create_env_fn = lambda: TransformedEnv(
         HierarcialEnvironment(
-            scenario="ljkæasdljk",
+            scenario="cruise_control",
             seed=random.randint(0, 9999999999),
             device="cpu",
 
