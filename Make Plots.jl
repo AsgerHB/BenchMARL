@@ -129,14 +129,16 @@ subdirs = let
 	subdirs = sort(subdirs; lt)
 end
 
-# ╔═╡ 29f9b030-c84b-4457-a8a7-0cb6b831e912
-@bind subdir Select(subdirs, default=subdirs[end])
+# ╔═╡ 92b500da-2a2e-444a-b224-3aecd5d96393
+@bind experiments MultiSelect(subdirs, 
+	default=[subdirs[end]], 
+	size=length(subdirs))
 
 # ╔═╡ cc717080-4e7d-4adf-8413-5c7644bfd6a1
-results_path = joinpath(results_base_path, subdir)
+experiment_paths = [joinpath(results_base_path, e) for e in experiments]
 
 # ╔═╡ 982cc0c2-57a3-4a49-a22b-94a383e2fa0f
-readdir(results_path)
+readdir(experiment_paths[1])
 
 # ╔═╡ e6a498e9-a632-4397-93ad-af89fd39c8f0
 md"""
@@ -145,12 +147,17 @@ md"""
 
 # ╔═╡ 695a7221-9e09-46c3-892a-981dc976341f
 let
-	note_path = joinpath(results_path, "note.txt")
-	if isfile(note_path)
-		(String(read(note_path))) |> Markdown.parse
-	else
-		md"no note.txt file found in this folder."
+	note_paths = [joinpath(p, "note.txt") for p in experiment_paths]
+	notes = []
+	for (p, q) in zip(note_paths, experiments)
+		if isfile(p)
+			push!(notes, String(read(p)))
+		else
+			push!(notes, "_No note.txt file found in_ $(replace(q, "_" => "\\_"))")
+		end
 	end
+
+	Markdown.parse(join(["> $(replace(note, "\n" => "\n> "))\n\n" for note in notes]))
 end
 
 # ╔═╡ f5d5e2f9-4213-4bfd-a6e4-2c62a60b5304
@@ -158,14 +165,31 @@ md"""
 ##### hparams0.txt
 """
 
+# ╔═╡ d9126554-aa49-4af9-876a-e12eefac1342
+experiment_paths
+
+# ╔═╡ 8f19f54a-938a-4ddf-ad96-9bb56e3da2c5
+splitpath(experiment_paths[1])[end]
+
 # ╔═╡ d744a864-5f2f-43e8-8913-20af703095fc
-let 
-	hparams_file = joinpath(results_path, subdir, "texts", "hparams0.txt")
-	if isfile(hparams_file)
-		hparams_file |> read |> String |> multiline
-	else
-		md"`$hparams_file` not found!"
+hyper_parameters = let 
+	hyper_parameters = []
+	for e in experiments
+		hparams_file = joinpath(results_base_path, e, e, "texts", "hparams0.txt")
+		if isfile(hparams_file)
+			hp = hparams_file |> read |> String
+			push!(hyper_parameters, hp)
+		else
+			@warn "`$hparams_file` not found!"
+		end
 	end
+	whichever_seed(s) = replace(s, r"seed: \w+" => "seed: whichever")
+	for (i, hp) in enumerate(hyper_parameters)
+		if whichever_seed(hp) != whichever_seed(hyper_parameters[1])
+			@warn "Mismatch in hyper-parameters between experiments 1 and $i"
+		end
+	end
+	hyper_parameters
 end
 
 # ╔═╡ 49035f17-1c3f-4e60-8bb9-6eb678dc2acf
@@ -173,17 +197,18 @@ md"""
 #### Paths
 """
 
-# ╔═╡ 8203da18-aa29-4195-a7bb-6dc01302ac2d
-readdir(results_path)
-
 # ╔═╡ eed44f59-4f26-4b54-8b7c-e1443871d985
-json_path = glob("*cruise_control*.json", results_path)[1]
+json_paths = [glob("*cruise_control*.json", p)[1] for p in experiment_paths]
 
 # ╔═╡ 14a164fe-eb04-4992-8db6-534198dcb866
-fraction_safe_path = glob("*cruise_control*/scalars/eval_agents_fraction_safe.csv", results_path)[1]
+fraction_safe_path = [
+	glob("*cruise_control*/scalars/eval_agents_fraction_safe.csv", p)[1]
+	for p in experiment_paths]
 
 # ╔═╡ c1aacc23-2191-4466-9c3d-0dafe15d5132
-total_frames_path = glob("*cruise_control*/scalars/counters_total_frames.csv", results_path)[1]
+total_frames_path = [
+	glob("*cruise_control*/scalars/counters_total_frames.csv", p)[1]
+	for p in experiment_paths]
 
 # ╔═╡ f67edd0e-ba0f-45a8-a2c3-10f0a3877f79
 md"""
@@ -207,29 +232,24 @@ md"""
 """
 
 # ╔═╡ dc1851e2-3ba9-4e35-a488-91918db66294
-total_frames = CSV.read(total_frames_path, DataFrame,
-	header=[:episode, :total_frames]);
+total_frames = let
+	total_frames = CSV.read(total_frames_path, DataFrame, 
+		header=[:episode, :total_frames]);
+	total_frames = unique(total_frames)
+end
 
 # ╔═╡ 21a05af8-3b08-401b-b2ae-74c1247eb7b4
 fraction_safe_total_frames = innerjoin(total_frames, fraction_safe, on=:episode)
 
-# ╔═╡ 21f1979f-68a2-4c8d-aad9-47832ad815cb
-fraction_safe_plot = let
-	@df fraction_safe_total_frames bar(:total_frames, :fraction_safe,
-		xlabel="Training runs",
-		ylabel="Fraction of runs safe",
-		ylim=(0, 1),
-		linecolor=colors.PETER_RIVER,
-		linewidth=0,
-		color=colors.PETER_RIVER,
-		label=nothing)
-
-	plot!([], seriestype=:bar,
-		linewidth=0,
-		color=colors.PETER_RIVER, 
-		label="MAPPO",
-		size=(350, 200),
-		legend=:bottomright)
+# ╔═╡ 38525ef2-439f-410d-b17c-ee1115ad0d96
+fraction_safe_total_frames_min_mean_max = let
+	grouping = groupby(fraction_safe_total_frames, [:episode, :total_frames])
+	
+	combine(grouping, 
+		:fraction_safe => minimum => :fraction_safe_min,
+		:fraction_safe => mean => :fraction_safe_mean,
+		:fraction_safe => maximum => :fraction_safe_max,
+	)
 end
 
 # ╔═╡ 2dcdacaf-6dec-46b9-b304-2cb95a586a5f
@@ -248,86 +268,131 @@ md"""
 		[self._get_reward(group, td).sum(0).mean().item() for td in rollouts]
 	```
 
-	That means the "Performance" that we want to report is simply the mean of returns.
+	That means the **"Performance"** that we want to report is simply the mean of returns.
+	
+	---
+
+	Additionally, `"step_count"` comes from the argument `total_frames` so I assume that is the total number of frames trained so far.
 """
 
 # ╔═╡ 924d2afd-a7ae-40cf-b55b-961dfb21fb01
-json_dict = JSON.parsefile(json_path)
+json_dicts = [JSON.parsefile(p) for p in json_paths];
+
+# ╔═╡ 2243f0d6-8da6-46fb-989c-99eacaa7542b
+json_dicts[1]
 
 # ╔═╡ 217e4198-378b-4e7f-944d-4851f9debbfe
-returns_dict = let
-	cruise_control = json_dict["hierarchial"]["cruise_control"]
-	first_algorithm_key = cruise_control |> keys |> first # e.g. "mappo"
-	seed_key = cruise_control[first_algorithm_key] |> keys |> first
-	returns = cruise_control[first_algorithm_key][seed_key]
+# Unwrap each dict to get
+# json_dict["hierarchial"]["cruise_control"]["mappo"]["seed_xXxX"]
+unwrapped_json_dicts = let
+	unwrapped_json_dicts = Dict[]
+	for json_dict in json_dicts
+		cruise_control = json_dict["hierarchial"]["cruise_control"]
+		first_algorithm_key = cruise_control |> keys |> first # e.g. "mappo"
+		first_seed_key = cruise_control[first_algorithm_key] |> keys |> first
+		first_seed = cruise_control[first_algorithm_key][first_seed_key]
+
+		push!(unwrapped_json_dicts, first_seed)
+	end
+	unwrapped_json_dicts
 end
 
-# ╔═╡ 95dadefb-d459-4fd2-9ae4-5b95d988f733
-keys(returns_dict)
-
-# ╔═╡ 141b0134-6305-4ebd-885f-bc4baa1204b1
-# A vector where the ith entry is "step_i".
-# Because Julia Dicts don't preserve order,
-# and I can't find a way to make JSON.jl spit it out in any other format,
-# I have to go through this whole mess.
+# ╔═╡ 4e873fe3-25d6-41ca-b70c-b5842bf722ff
 returns = let
-	# -1 is for the "absolute_metrics" entry, that I don't know what is.
-	number_of_steps = (returns_dict |> keys |> length) - 1
-	steps = Vector(undef, number_of_steps)
-	for key in keys(returns_dict)
-		step_number = replace(key, "step_" => "")
-		try 
-			step_number = parse(Int, step_number)
-		catch e
-			if key != "absolute_metrics"
-				throw(error("Unexpedted key: $key"))
-			end
-			continue
+	returns = DataFrame(:local_returns => [], :total_frames => [])
+	for json_dict in unwrapped_json_dicts
+		for (k, v) in json_dict
+			if k == "absolute_metrics" continue end
+			push!(returns, [v["agents_return"], v["step_count"]])
 		end
-		step_number += 1
-		steps[step_number] = returns_dict[key]
 	end
-	steps
+	sort!(returns, :total_frames)
 end
 
 # ╔═╡ a67764fd-aaed-403b-a525-564609516265
-[r["step_count"] for r in returns]
+returns.total_frames |> unique |> sort
+
+# ╔═╡ d9561a96-aa95-4650-83fc-25b598729ca7
+returns.total_frames |> maximum
+
+# ╔═╡ c60cbfe1-239c-46f9-9097-fcd32bdcfeb6
+const episode_length = 100
 
 # ╔═╡ 739d6aa9-e848-4a26-8b2d-8b8d0b4c5e39
-returns_with_means = let
-	returns_with_means = copy(returns)
-	for r in returns_with_means
-		r["mean_agents_return"] = mean(r["agents_return"])
-	end
-	returns_with_means
+cleandata = let
+	df = returns
+	df = transform(df, :local_returns => ByRow(mean) => :performance)
+	grouping = groupby(df, :total_frames)
+	
+	df = combine(grouping, 
+		:performance => minimum => :min_performance,
+		:performance => mean => :mean_performance,
+		:performance => maximum => :max_performance)
+
+	# Convert to number of episodes while we're at it
+	df = transform(df, :total_frames => (x -> x/episode_length) => :episodes)
 end
 
-# ╔═╡ 0a9237d6-1adf-4a46-bff2-d3dd6d3b31c3
-[r["mean_agents_return"] for r in returns_with_means]
-
 # ╔═╡ 40b1ebe8-7a34-420d-8a78-8f1c39d43cdb
-[r["mean_agents_return"] for r in returns_with_means] |> maximum
+cleandata.max_performance |> maximum
+
+# ╔═╡ 9462b2c7-d854-4849-a979-b5f959deb506
+cleandata.min_performance[end]
+
+# ╔═╡ 74697e16-e08d-4569-8492-e04c6e1a671f
+function get_ribbon(mins, means, maxes)
+	lower = means .- mins
+	upper = maxes .- means
+	lower, upper
+end
+
+# ╔═╡ 21f1979f-68a2-4c8d-aad9-47832ad815cb
+fraction_safe_plot = let
+	df = fraction_safe_total_frames_min_mean_max
+	
+	bar(df.total_frames, df.fraction_safe_mean,
+		xlabel="Training runs",
+		ylabel="Fraction of runs safe",
+		ylim=(0, 1),
+		size=(350, 200),
+		legend=:bottomright,
+		linecolor=colors.PETER_RIVER,
+		linewidth=0,
+		color=colors.PETER_RIVER,
+		label="MAPPO")
+
+	scatter!(df.total_frames, df.fraction_safe_mean,
+		markershape=:hline,
+		color=colors.PETER_RIVER,
+		label=nothing,
+		yerror=get_ribbon(df.fraction_safe_min, df.fraction_safe_mean, df.fraction_safe_max),)
+end
+
+# ╔═╡ 63272f45-ae51-4423-8c41-eeb7d0ab53ee
+ribbon=get_ribbon(
+	fraction_safe_total_frames_min_mean_max.fraction_safe_min, 
+	fraction_safe_total_frames_min_mean_max.fraction_safe_mean, 
+	fraction_safe_total_frames_min_mean_max.fraction_safe_max)
 
 # ╔═╡ e7b82b75-2df2-413b-89d4-9a9987707df8
 performance_plot = let
-	mean_agent_returns = [r["mean_agents_return"] for r in returns_with_means]
-	steps = [r["step_count"] for r in returns_with_means]
-	ymin, ymax = minimum(mean_agent_returns), maximum(mean_agent_returns)
+	min_performance = cleandata.min_performance
+	mean_performance = cleandata.mean_performance
+	max_performance = cleandata.max_performance
+	episodes = cleandata.episodes
+	
+	ymin, ymax = minimum(min_performance), maximum(max_performance)
 	ylims = (ymin - abs(ymin)*0.25, max(0, ymax + abs(ymax)*0.25))
 	#ylims = (-10000, -2000)
 	
-	plot(steps,
-		mean_agent_returns;
+	plot(episodes, mean_performance;
+		ribbon=get_ribbon(min_performance, mean_performance, max_performance),
 		xlabel="Total episodes trained",
 		ylabel="Performance",
 		label="MAPPO",
 		ylims,
 		color=colors.PETER_RIVER,
 		linewidth=2,
-		markerstrokewidth=2,
-		markerstrokecolor=:white,
-		markershape=:diamond,
-		markersize=4,
 		legend=:bottomright,
 		#yscale=:log,
 		#size=(350, 200),
@@ -340,6 +405,9 @@ plot(performance_plot,
 	fraction_safe_plot, 
 	layout=(3, 1), 
 	size=(460, 800))
+
+# ╔═╡ 993b2b7a-606e-42ab-a1b6-beaf2f6796cf
+
 
 # ╔═╡ 8e1a2b4a-e5e2-48a0-bba6-6ae1554ec289
 plot(performance_plot, ylims=(-10000, -2000))
@@ -575,6 +643,12 @@ version = "1.0.0"
 deps = ["Printf"]
 uuid = "ade2ca70-3891-5945-98fb-dc099432e06a"
 
+[[deps.Dbus_jll]]
+deps = ["Artifacts", "Expat_jll", "JLLWrappers", "Libdl"]
+git-tree-sha1 = "fc173b380865f70627d7dd1190dc2fce6cc105af"
+uuid = "ee1fde0b-3d02-5ea6-8484-8dfef6360eab"
+version = "1.14.10+0"
+
 [[deps.DelimitedFiles]]
 deps = ["Mmap"]
 git-tree-sha1 = "9e2f36d3c96a820c678f2f1f1782582fcf685bae"
@@ -726,7 +800,7 @@ deps = ["Random"]
 uuid = "9fa8497b-333b-5362-9e8d-4d0656e87820"
 
 [[deps.GLFW_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl", "Libglvnd_jll", "Xorg_libXcursor_jll", "Xorg_libXi_jll", "Xorg_libXinerama_jll", "Xorg_libXrandr_jll", "xkbcommon_jll"]
+deps = ["Artifacts", "JLLWrappers", "Libdl", "Libglvnd_jll", "Xorg_libXcursor_jll", "Xorg_libXi_jll", "Xorg_libXinerama_jll", "Xorg_libXrandr_jll", "libdecor_jll", "xkbcommon_jll"]
 git-tree-sha1 = "3f74912a156096bd8fdbef211eff66ab446e7297"
 uuid = "0656b61e-2033-5cc2-a64a-77c0f6c09b89"
 version = "3.4.0+0"
@@ -1182,6 +1256,12 @@ deps = ["LinearAlgebra", "SparseArrays", "SuiteSparse"]
 git-tree-sha1 = "949347156c25054de2db3b166c52ac4728cbad65"
 uuid = "90014a1f-27ba-587c-ab20-58faa44d9150"
 version = "0.11.31"
+
+[[deps.Pango_jll]]
+deps = ["Artifacts", "Cairo_jll", "Fontconfig_jll", "FreeType2_jll", "FriBidi_jll", "Glib_jll", "HarfBuzz_jll", "JLLWrappers", "Libdl"]
+git-tree-sha1 = "9dd97171646850ee607593965ce1f55063d8d3f9"
+uuid = "36c8627f-9965-5494-a995-c6b170f724f3"
+version = "1.54.0+0"
 
 [[deps.Parsers]]
 deps = ["Dates", "PrecompileTools", "UUIDs"]
@@ -1835,6 +1915,12 @@ deps = ["Artifacts", "Libdl"]
 uuid = "8e850b90-86db-534c-a0d3-1478176c7d93"
 version = "5.8.0+1"
 
+[[deps.libdecor_jll]]
+deps = ["Artifacts", "Dbus_jll", "JLLWrappers", "Libdl", "Libglvnd_jll", "Pango_jll", "Wayland_jll", "xkbcommon_jll"]
+git-tree-sha1 = "9bf7903af251d2050b467f76bdbe57ce541f7f4f"
+uuid = "1183f4f0-6f2a-5f1a-908b-139f9cdfea6f"
+version = "0.2.2+0"
+
 [[deps.libevdev_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "141fe65dc3efabb0b1d5ba74e91f6ad26f84cc22"
@@ -1917,15 +2003,16 @@ version = "1.4.1+1"
 # ╠═701b52ac-5871-4d2b-afdb-52422fefee0b
 # ╠═b36d6b21-5118-46c5-a2b6-55c6ca75545f
 # ╠═22baed78-823a-4bab-b1cf-f99ec4f7d701
-# ╠═29f9b030-c84b-4457-a8a7-0cb6b831e912
+# ╠═92b500da-2a2e-444a-b224-3aecd5d96393
 # ╠═cc717080-4e7d-4adf-8413-5c7644bfd6a1
 # ╠═982cc0c2-57a3-4a49-a22b-94a383e2fa0f
 # ╟─e6a498e9-a632-4397-93ad-af89fd39c8f0
 # ╟─695a7221-9e09-46c3-892a-981dc976341f
 # ╟─f5d5e2f9-4213-4bfd-a6e4-2c62a60b5304
-# ╟─d744a864-5f2f-43e8-8913-20af703095fc
+# ╠═d9126554-aa49-4af9-876a-e12eefac1342
+# ╠═8f19f54a-938a-4ddf-ad96-9bb56e3da2c5
+# ╠═d744a864-5f2f-43e8-8913-20af703095fc
 # ╟─49035f17-1c3f-4e60-8bb9-6eb678dc2acf
-# ╠═8203da18-aa29-4195-a7bb-6dc01302ac2d
 # ╠═eed44f59-4f26-4b54-8b7c-e1443871d985
 # ╠═14a164fe-eb04-4992-8db6-534198dcb866
 # ╠═c1aacc23-2191-4466-9c3d-0dafe15d5132
@@ -1935,18 +2022,24 @@ version = "1.4.1+1"
 # ╟─9ac46a71-ab48-468e-a9a3-5043e02dc497
 # ╠═dc1851e2-3ba9-4e35-a488-91918db66294
 # ╠═21a05af8-3b08-401b-b2ae-74c1247eb7b4
+# ╠═38525ef2-439f-410d-b17c-ee1115ad0d96
 # ╠═21f1979f-68a2-4c8d-aad9-47832ad815cb
+# ╠═63272f45-ae51-4423-8c41-eeb7d0ab53ee
 # ╟─2dcdacaf-6dec-46b9-b304-2cb95a586a5f
 # ╟─2931d9f7-4b63-47b4-8b8c-04e5ed842e9b
 # ╠═924d2afd-a7ae-40cf-b55b-961dfb21fb01
+# ╠═2243f0d6-8da6-46fb-989c-99eacaa7542b
 # ╠═217e4198-378b-4e7f-944d-4851f9debbfe
-# ╠═95dadefb-d459-4fd2-9ae4-5b95d988f733
-# ╠═141b0134-6305-4ebd-885f-bc4baa1204b1
+# ╠═4e873fe3-25d6-41ca-b70c-b5842bf722ff
 # ╠═a67764fd-aaed-403b-a525-564609516265
+# ╠═d9561a96-aa95-4650-83fc-25b598729ca7
 # ╠═739d6aa9-e848-4a26-8b2d-8b8d0b4c5e39
-# ╠═0a9237d6-1adf-4a46-bff2-d3dd6d3b31c3
 # ╠═40b1ebe8-7a34-420d-8a78-8f1c39d43cdb
+# ╠═9462b2c7-d854-4849-a979-b5f959deb506
+# ╠═c60cbfe1-239c-46f9-9097-fcd32bdcfeb6
+# ╠═74697e16-e08d-4569-8492-e04c6e1a671f
 # ╠═e7b82b75-2df2-413b-89d4-9a9987707df8
+# ╠═993b2b7a-606e-42ab-a1b6-beaf2f6796cf
 # ╠═8e1a2b4a-e5e2-48a0-bba6-6ae1554ec289
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
