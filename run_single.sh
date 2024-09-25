@@ -11,6 +11,8 @@ python benchmarl/run.py algorithm=mappo task=hierarchial/cruise_control \
     experiment.train_device=cuda \
     experiment.buffer_device=cuda \
     experiment.save_folder="$results_dir" \
+    experiment.max_n_frames=6000000 \
+    experiment.evaluation_interval=600000 \
     task.safety_violation_penalty=1600 \
     seed=$RANDOM
 
