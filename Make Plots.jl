@@ -349,9 +349,10 @@ end
 # ╔═╡ 21f1979f-68a2-4c8d-aad9-47832ad815cb
 fraction_safe_plot = let
 	df = fraction_safe_total_frames_min_mean_max
+	df = transform(df, :total_frames => (x -> x/episode_length) => :episodes)
 	
-	bar(df.total_frames, df.fraction_safe_mean,
-		xlabel="Training runs",
+	bar(df.episodes, df.fraction_safe_mean,
+		xlabel="Total eisodes trained",
 		ylabel="Fraction of runs safe",
 		ylim=(0, 1),
 		size=(350, 200),
@@ -361,7 +362,7 @@ fraction_safe_plot = let
 		color=colors.PETER_RIVER,
 		label="MAPPO")
 
-	scatter!(df.total_frames, df.fraction_safe_mean,
+	scatter!(df.episodes, df.fraction_safe_mean,
 		markershape=:hline,
 		color=colors.PETER_RIVER,
 		label=nothing,
@@ -394,6 +395,7 @@ performance_plot = let
 		color=colors.PETER_RIVER,
 		linewidth=2,
 		legend=:bottomright,
+		right_margin=2mm,
 		#yscale=:log,
 		#size=(350, 200),
 	)
