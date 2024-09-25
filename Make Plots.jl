@@ -403,16 +403,35 @@ end
 
 # ╔═╡ 701b52ac-5871-4d2b-afdb-52422fefee0b
 plot(performance_plot, 
-	plot(performance_plot, ylim=(-10000, -1000)), 
+	plot(performance_plot, ylim=(-20000, -1000)), 
 	fraction_safe_plot, 
 	layout=(3, 1), 
 	size=(460, 800))
 
 # ╔═╡ 993b2b7a-606e-42ab-a1b6-beaf2f6796cf
-
+let
+end
 
 # ╔═╡ 8e1a2b4a-e5e2-48a0-bba6-6ae1554ec289
 plot(performance_plot, ylims=(-10000, -2000))
+
+# ╔═╡ 31a87cf6-d03a-4b33-be99-3595183b9f04
+md"""
+## Exporting Results
+
+I wanna make a combined plot, so I'm dumping cleandata to csv, to load it in my other repository.
+"""
+
+# ╔═╡ bc2e5c34-7550-4228-a2f9-bb7916bb1034
+experiments; @bind export_results_button CounterButton("Export Results")
+
+# ╔═╡ 744cc844-a43e-4a71-9909-64bf3eb8f220
+if export_results_button > 0 let
+	
+	exported_results_path = joinpath(results_base_path, "Exported Results.csv")
+	CSV.write(exported_results_path, cleandata)
+	"✅ Wrote clean data to `$exported_results_path`" |> Markdown.parse
+end end
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -2043,5 +2062,8 @@ version = "1.4.1+1"
 # ╠═e7b82b75-2df2-413b-89d4-9a9987707df8
 # ╠═993b2b7a-606e-42ab-a1b6-beaf2f6796cf
 # ╠═8e1a2b4a-e5e2-48a0-bba6-6ae1554ec289
+# ╟─31a87cf6-d03a-4b33-be99-3595183b9f04
+# ╟─bc2e5c34-7550-4228-a2f9-bb7916bb1034
+# ╟─744cc844-a43e-4a71-9909-64bf3eb8f220
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
