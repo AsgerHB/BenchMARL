@@ -327,7 +327,8 @@ class HierarcialEnvironment(EnvBase):
         new_t = (t + self.t_act)%self.period
         new_observations = torch.stack([new_v, new_t], dim=1)
 
-        reward = actions - 4
+        reward = actions - 4.0
+        reward = reward.unsqueeze(-1)
 
         return TensorDict({
             "agents": TensorDict({
