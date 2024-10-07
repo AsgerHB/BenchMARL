@@ -26,6 +26,8 @@ begin
 	using Statistics
 	using Measures
 	using NaturalSort
+	using Unzip
+	using Printf
 end
 
 # ╔═╡ 1da1a209-449f-4c78-af04-d44e4dfe4b63
@@ -242,7 +244,7 @@ end
 fraction_safe_total_frames = innerjoin(total_frames, fraction_safe, on=:episode)
 
 # ╔═╡ 38525ef2-439f-410d-b17c-ee1115ad0d96
-fraction_safe_total_frames_min_mean_max = let
+fraction_safe_min_mean_max_total_frames = let
 	grouping = groupby(fraction_safe_total_frames, [:episode, :total_frames])
 	
 	combine(grouping, 
@@ -250,6 +252,16 @@ fraction_safe_total_frames_min_mean_max = let
 		:fraction_safe => mean => :fraction_safe_mean,
 		:fraction_safe => maximum => :fraction_safe_max,
 	)
+end
+
+# ╔═╡ eec2f2a6-d3d8-4cb4-a08e-284c08c77cd5
+percent_safe_min_mean_max_total_frames = let
+	df = fraction_safe_min_mean_max_total_frames
+	df = transform(df, :fraction_safe_min => (x -> x*100) => :percent_safe_min)
+	df = transform(df, :fraction_safe_mean => (x -> x*100) => :percent_safe_mean)
+	df = transform(df, :fraction_safe_max => (x -> x*100) => :percent_safe_max)
+
+	df = select(df, [:total_frames, :percent_safe_min, :percent_safe_mean, :percent_safe_max])
 end
 
 # ╔═╡ 2dcdacaf-6dec-46b9-b304-2cb95a586a5f
@@ -268,7 +280,7 @@ md"""
 		[self._get_reward(group, td).sum(0).mean().item() for td in rollouts]
 	```
 
-	That means the **"Performance"** that we want to report is simply the mean of returns.
+	That means the **"Cost"** that we want to report is simply the sum of returns.
 	
 	---
 
@@ -318,26 +330,35 @@ returns.total_frames |> maximum
 # ╔═╡ c60cbfe1-239c-46f9-9097-fcd32bdcfeb6
 const episode_length = 100
 
+# ╔═╡ e1edc49b-8cf3-4bcf-a205-1e89f1b48bc9
+# :episodes is NOT to be confused with the :episode column that BenchMARL uses.
+percent_safe_min_mean_max_episodes = let
+	df = percent_safe_min_mean_max_total_frames
+	df = transform(df, :total_frames => (x -> x/episode_length) => :episodes)
+	df = select(df, [:episodes, :percent_safe_min, :percent_safe_mean, :percent_safe_max])
+end
+
 # ╔═╡ 739d6aa9-e848-4a26-8b2d-8b8d0b4c5e39
 cleandata = let
 	df = returns
-	df = transform(df, :local_returns => ByRow(mean) => :performance)
+	df = transform(df, :local_returns => ByRow(x -> -x) => :costs)
+	df = transform(df, :costs => ByRow(sum) => :cost)
 	grouping = groupby(df, :total_frames)
 	
 	df = combine(grouping, 
-		:performance => minimum => :min_performance,
-		:performance => mean => :mean_performance,
-		:performance => maximum => :max_performance)
+		:cost => minimum => :min_cost,
+		:cost => mean => :mean_cost,
+		:cost => maximum => :max_cost)
 
 	# Convert to number of episodes while we're at it
 	df = transform(df, :total_frames => (x -> x/episode_length) => :episodes)
 end
 
 # ╔═╡ 40b1ebe8-7a34-420d-8a78-8f1c39d43cdb
-cleandata.max_performance |> maximum
+cleandata.max_cost |> maximum
 
 # ╔═╡ 9462b2c7-d854-4849-a979-b5f959deb506
-cleandata.min_performance[end]
+cleandata.min_cost[end]
 
 # ╔═╡ 74697e16-e08d-4569-8492-e04c6e1a671f
 function get_ribbon(mins, means, maxes)
@@ -347,50 +368,60 @@ function get_ribbon(mins, means, maxes)
 end
 
 # ╔═╡ 21f1979f-68a2-4c8d-aad9-47832ad815cb
-fraction_safe_plot = let
-	df = fraction_safe_total_frames_min_mean_max
-	df = transform(df, :total_frames => (x -> x/episode_length) => :episodes)
+percent_safe_plot = let
+	df = percent_safe_min_mean_max_episodes
+
+	xmin, xmax = minimum(df.episodes), maximum(df.episodes)
+	xticks = [(x, @sprintf("%.f", x)) for x in LinRange(0, xmax, 4)] |> unzip
+	yticks = [(y, "$y%") for y in LinRange(0, 100, 5)] |> unzip
 	
-	bar(df.episodes, df.fraction_safe_mean,
-		xlabel="Total eisodes trained",
-		ylabel="Fraction of runs safe",
-		ylim=(0, 1),
-		size=(350, 200),
+	bar(df.episodes, df.percent_safe_mean;
+		xticks,
+		yticks,
+		xlabel="Total episodes trained",
+		ylabel="Safe runs",
+		ylim=(0, 100),
+		size=(350, 130),
+		topmargin=2mm,
+		bottommargin=2mm,
 		legend=:bottomright,
 		linecolor=colors.PETER_RIVER,
 		linewidth=0,
 		color=colors.PETER_RIVER,
 		label="MAPPO")
 
-	scatter!(df.episodes, df.fraction_safe_mean,
+	scatter!(df.episodes, df.percent_safe_mean,
 		markershape=:hline,
 		color=colors.PETER_RIVER,
 		label=nothing,
-		yerror=get_ribbon(df.fraction_safe_min, df.fraction_safe_mean, df.fraction_safe_max),)
+		yerror=get_ribbon(df.percent_safe_min, df.percent_safe_mean, df.percent_safe_max),)
 end
 
 # ╔═╡ 63272f45-ae51-4423-8c41-eeb7d0ab53ee
-ribbon=get_ribbon(
-	fraction_safe_total_frames_min_mean_max.fraction_safe_min, 
-	fraction_safe_total_frames_min_mean_max.fraction_safe_mean, 
-	fraction_safe_total_frames_min_mean_max.fraction_safe_max)
+get_ribbon(
+	percent_safe_min_mean_max_episodes.percent_safe_min, 
+	percent_safe_min_mean_max_episodes.percent_safe_mean, 
+	percent_safe_min_mean_max_episodes.percent_safe_max)
 
 # ╔═╡ e7b82b75-2df2-413b-89d4-9a9987707df8
 performance_plot = let
-	min_performance = cleandata.min_performance
-	mean_performance = cleandata.mean_performance
-	max_performance = cleandata.max_performance
+	min_cost = cleandata.min_cost
+	mean_cost = cleandata.mean_cost
+	max_cost = cleandata.max_cost
 	episodes = cleandata.episodes
 	
-	ymin, ymax = minimum(min_performance), maximum(max_performance)
+	xmin, xmax = minimum(episodes), maximum(episodes)
+	xticks = [(x, @sprintf("%.f", x)) for x in LinRange(0, xmax, 4)] |> unzip
+	ymin, ymax = minimum(min_cost), maximum(max_cost)
 	ylims = (ymin - abs(ymin)*0.25, max(0, ymax + abs(ymax)*0.25))
 	#ylims = (-10000, -2000)
 	
-	plot(episodes, mean_performance;
-		ribbon=get_ribbon(min_performance, mean_performance, max_performance),
+	plot(episodes, mean_cost;
+		ribbon=get_ribbon(min_cost, mean_cost, max_cost),
 		xlabel="Total episodes trained",
-		ylabel="Performance",
+		ylabel="cost",
 		label="MAPPO",
+		xticks,
 		ylims,
 		color=colors.PETER_RIVER,
 		linewidth=2,
@@ -404,7 +435,7 @@ end
 # ╔═╡ 701b52ac-5871-4d2b-afdb-52422fefee0b
 plot(performance_plot, 
 	plot(performance_plot, ylim=(-20000, -1000)), 
-	fraction_safe_plot, 
+	percent_safe_plot, 
 	layout=(3, 1), 
 	size=(460, 800))
 
@@ -413,7 +444,7 @@ let
 end
 
 # ╔═╡ 8e1a2b4a-e5e2-48a0-bba6-6ae1554ec289
-plot(performance_plot, ylims=(-10000, -2000))
+plot(performance_plot, ylims=(0, 100000))
 
 # ╔═╡ 31a87cf6-d03a-4b33-be99-3595183b9f04
 md"""
@@ -427,7 +458,6 @@ experiments; @bind export_results_button CounterButton("Export Results")
 
 # ╔═╡ 744cc844-a43e-4a71-9909-64bf3eb8f220
 if export_results_button > 0 let
-	
 	exported_results_path = joinpath(results_base_path, "Exported Results.csv")
 	CSV.write(exported_results_path, cleandata)
 	"✅ Wrote clean data to `$exported_results_path`" |> Markdown.parse
@@ -444,8 +474,10 @@ Measures = "442fdcdd-2543-5da2-b0f3-8c86c306513e"
 NaturalSort = "c020b1a1-e9b0-503a-9c33-f039bfc54a85"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 StatsPlots = "f3b207a7-027a-5e70-b257-86293d7955fd"
+Unzip = "41fe7b60-77ed-43a1-b4f0-825fd5a5650d"
 
 [compat]
 CSV = "~0.10.14"
@@ -457,15 +489,16 @@ NaturalSort = "~1.0.0"
 Plots = "~1.40.5"
 PlutoUI = "~0.7.59"
 StatsPlots = "~0.15.7"
+Unzip = "~0.2.0"
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000002
 PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.10.4"
+julia_version = "1.10.5"
 manifest_format = "2.0"
-project_hash = "94c1fcb7815e657872b1d9ac0252966daff1f005"
+project_hash = "b15e7d3ed6023b787c7b33c8f0e8ddab898ba42d"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -1934,7 +1967,7 @@ version = "0.15.1+0"
 [[deps.libblastrampoline_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "8e850b90-86db-534c-a0d3-1478176c7d93"
-version = "5.8.0+1"
+version = "5.11.0+0"
 
 [[deps.libdecor_jll]]
 deps = ["Artifacts", "Dbus_jll", "JLLWrappers", "Libdl", "Libglvnd_jll", "Pango_jll", "Wayland_jll", "xkbcommon_jll"]
@@ -2044,6 +2077,8 @@ version = "1.4.1+1"
 # ╠═dc1851e2-3ba9-4e35-a488-91918db66294
 # ╠═21a05af8-3b08-401b-b2ae-74c1247eb7b4
 # ╠═38525ef2-439f-410d-b17c-ee1115ad0d96
+# ╠═eec2f2a6-d3d8-4cb4-a08e-284c08c77cd5
+# ╠═e1edc49b-8cf3-4bcf-a205-1e89f1b48bc9
 # ╠═21f1979f-68a2-4c8d-aad9-47832ad815cb
 # ╠═63272f45-ae51-4423-8c41-eeb7d0ab53ee
 # ╟─2dcdacaf-6dec-46b9-b304-2cb95a586a5f
