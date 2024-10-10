@@ -5,8 +5,12 @@ date
 
 source venv/bin/activate
 
-results_dir="$HOME/Results/N-player CP MAPPO"
-mkdir -p "$results_dir"
+# Duplicate magic string.
+# BenchMARL requires the results dir to be quoted and space-escaped,
+# while mkdir -p requires it to be either quoted or space-escaped, but not both.
+results_dir="$HOME/Results/N-player\ CP\ MAPPO"
+mkdir -p "$HOME/Results/N-player CP MAPPO"
+
 python benchmarl/run.py algorithm=mappo task=hierarchial/chemical_production \
     experiment.loggers="[csv]" \
     experiment.train_device=cuda \
