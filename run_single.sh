@@ -6,7 +6,7 @@ date
 source venv/bin/activate
 
 results_dir="$HOME/Results/N-player\ CC\ MAPPO"
-python benchmarl/run.py algorithm=mappo task=hierarchial/cruise_control \
+python benchmarl/run.py algorithm=mappo task=hierarchial/chemical_production \
     experiment.loggers="[csv]" \
     experiment.train_device=cuda \
     experiment.buffer_device=cuda \
