@@ -106,15 +106,29 @@ end
 
 # ╔═╡ 1c3469fb-57b8-4f8b-a760-2423fe3adfdb
 md"""
-# Do Plots of Cruise-control
+# Do Plots
 Expecting the experiment to have been run with argument `experiment.loggers='[csv]`
 
 (I love that Pluto allows this.)
 First, the main result of the notebook: 
 """
 
+# ╔═╡ e874d5a2-14c6-4b1f-b2d4-69d325666d4e
+md"""
+Select experiment variant. Or, you know, just edit the path manually.
+
+`variant = ` $(@bind variant Select(["Cruise Control", "Chemical Production"]))
+"""
+
+# ╔═╡ af22ee41-1e36-4f08-ad99-bd0959f0a154
+default_base_path = if variant == "Cruise Control"
+	"/home/asger/Results/N-player CC MAPPO"
+elseif variant == "Chemical Production"
+	"/home/asger/Results/N-player CP MAPPO"
+end
+
 # ╔═╡ b36d6b21-5118-46c5-a2b6-55c6ca75545f
-@bind results_base_path TextField(80, default="/home/asger/Results/N-player CC MAPPO")
+@bind results_base_path TextField(80, default=default_base_path)
 
 # ╔═╡ 22baed78-823a-4bab-b1cf-f99ec4f7d701
 subdirs = let
@@ -199,17 +213,29 @@ md"""
 #### Paths
 """
 
+# ╔═╡ 3ec450f7-1f16-47d3-8bfb-de02980c0d7d
+function unwrap(vec)
+	if length(vec) == 0
+		error("No element found")
+	elseif length(vec) > 1
+		error("More than one element found", vec)
+	end
+	vec[1]
+end
+
 # ╔═╡ eed44f59-4f26-4b54-8b7c-e1443871d985
-json_paths = [glob("*cruise_control*.json", p)[1] for p in experiment_paths]
+json_paths = [
+	glob("*.json", p) |> unwrap 
+	for p in experiment_paths]
 
 # ╔═╡ 14a164fe-eb04-4992-8db6-534198dcb866
 fraction_safe_path = [
-	glob("*cruise_control*/scalars/eval_agents_fraction_safe.csv", p)[1]
+	glob("*/scalars/eval_agents_fraction_safe.csv", p) |> unwrap
 	for p in experiment_paths]
 
 # ╔═╡ c1aacc23-2191-4466-9c3d-0dafe15d5132
 total_frames_path = [
-	glob("*cruise_control*/scalars/counters_total_frames.csv", p)[1]
+	glob("*/scalars/counters_total_frames.csv", p) |> unwrap
 	for p in experiment_paths]
 
 # ╔═╡ f67edd0e-ba0f-45a8-a2c3-10f0a3877f79
@@ -299,10 +325,11 @@ json_dicts[1]
 unwrapped_json_dicts = let
 	unwrapped_json_dicts = Dict[]
 	for json_dict in json_dicts
-		cruise_control = json_dict["hierarchial"]["cruise_control"]
-		first_algorithm_key = cruise_control |> keys |> first # e.g. "mappo"
-		first_seed_key = cruise_control[first_algorithm_key] |> keys |> first
-		first_seed = cruise_control[first_algorithm_key][first_seed_key]
+		first_experiment_key = json_dict["hierarchial"] |> keys |> first
+		experiment = json_dict["hierarchial"][first_experiment_key]
+		first_algorithm_key = experiment |> keys |> first # e.g. "mappo"
+		first_seed_key = experiment[first_algorithm_key] |> keys |> first
+		first_seed = experiment[first_algorithm_key][first_seed_key]
 
 		push!(unwrapped_json_dicts, first_seed)
 	end
@@ -414,7 +441,6 @@ performance_plot = let
 	xticks = [(x, @sprintf("%.f", x)) for x in LinRange(0, xmax, 4)] |> unzip
 	ymin, ymax = minimum(min_cost), maximum(max_cost)
 	ylims = (ymin - abs(ymin)*0.25, max(0, ymax + abs(ymax)*0.25))
-	#ylims = (-10000, -2000)
 	
 	plot(episodes, mean_cost;
 		ribbon=get_ribbon(min_cost, mean_cost, max_cost),
@@ -432,19 +458,23 @@ performance_plot = let
 	)
 end
 
-# ╔═╡ 701b52ac-5871-4d2b-afdb-52422fefee0b
-plot(performance_plot, 
-	plot(performance_plot, ylim=(-20000, -1000)), 
-	percent_safe_plot, 
-	layout=(3, 1), 
-	size=(460, 800))
-
 # ╔═╡ 993b2b7a-606e-42ab-a1b6-beaf2f6796cf
-let
+zoomed_in_ylim = if variant == "Cruise Control"
+	(0, 200000)
+else
+	(0, 2000)
 end
 
+# ╔═╡ 701b52ac-5871-4d2b-afdb-52422fefee0b
+plot(performance_plot, 
+	plot(performance_plot, ylim=zoomed_in_ylim), 
+	percent_safe_plot, 
+	layout=(3, 1), 
+	margin=3mm,
+	size=(460, 800))
+
 # ╔═╡ 8e1a2b4a-e5e2-48a0-bba6-6ae1554ec289
-plot(performance_plot, ylims=(0, 100000))
+plot(performance_plot, ylims=zoomed_in_ylim)
 
 # ╔═╡ 31a87cf6-d03a-4b33-be99-3595183b9f04
 md"""
@@ -2055,6 +2085,8 @@ version = "1.4.1+1"
 # ╠═03a7a8c8-5aab-4ad1-8343-3c9f8d103601
 # ╟─1c3469fb-57b8-4f8b-a760-2423fe3adfdb
 # ╠═701b52ac-5871-4d2b-afdb-52422fefee0b
+# ╟─e874d5a2-14c6-4b1f-b2d4-69d325666d4e
+# ╠═af22ee41-1e36-4f08-ad99-bd0959f0a154
 # ╠═b36d6b21-5118-46c5-a2b6-55c6ca75545f
 # ╠═22baed78-823a-4bab-b1cf-f99ec4f7d701
 # ╠═92b500da-2a2e-444a-b224-3aecd5d96393
@@ -2067,6 +2099,7 @@ version = "1.4.1+1"
 # ╠═8f19f54a-938a-4ddf-ad96-9bb56e3da2c5
 # ╠═d744a864-5f2f-43e8-8913-20af703095fc
 # ╟─49035f17-1c3f-4e60-8bb9-6eb678dc2acf
+# ╠═3ec450f7-1f16-47d3-8bfb-de02980c0d7d
 # ╠═eed44f59-4f26-4b54-8b7c-e1443871d985
 # ╠═14a164fe-eb04-4992-8db6-534198dcb866
 # ╠═c1aacc23-2191-4466-9c3d-0dafe15d5132
@@ -2099,6 +2132,6 @@ version = "1.4.1+1"
 # ╠═8e1a2b4a-e5e2-48a0-bba6-6ae1554ec289
 # ╟─31a87cf6-d03a-4b33-be99-3595183b9f04
 # ╟─bc2e5c34-7550-4228-a2f9-bb7916bb1034
-# ╟─744cc844-a43e-4a71-9909-64bf3eb8f220
+# ╠═744cc844-a43e-4a71-9909-64bf3eb8f220
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
