@@ -13,7 +13,7 @@
             "console": "integratedTerminal",
             //"args": "${command:pickArgs}"
             "args": "algorithm=mappo task=hierarchial/cruise_control task.n_agents=4 experiment.on_policy_collected_frames_per_batch=1000 experiment.max_n_frames=3000 experiment.evaluation_interval=1000 experiment.checkpoint_interval=3000 experiment.loggers='[csv]' experiment.evaluation_episodes=30",
-            // "justMyCode": false
+            "justMyCode": false
         },
         {
             "name": "pdb Cruise Control with MAPPO (Properly trained)",
@@ -23,7 +23,7 @@
             "console": "integratedTerminal",
             //"args": "${command:pickArgs}"
             "args": "algorithm=mappo task=hierarchial/cruise_control  experiment.on_policy_collected_frames_per_batch=1000 experiment.max_n_frames=100000 experiment.evaluation_interval=10000 experiment.checkpoint_interval=10000 experiment.loggers='[csv]' experiment.evaluation_episodes=1000",
-            // "justMyCode": false
+            "justMyCode": false
         },
         {
             "name": "pdb Chemical Production with MAPPO (Quick debug run)",
@@ -32,8 +32,8 @@
             "program": "benchmarl/run.py",
             "console": "integratedTerminal",
             //"args": "${command:pickArgs}"
-            "args": "algorithm=mappo task=hierarchial/chemical_production experiment.on_policy_collected_frames_per_batch=1000 experiment.max_n_frames=3000 experiment.evaluation_interval=1000 experiment.checkpoint_interval=3000 experiment.loggers='[csv]' experiment.evaluation_episodes=30",
-            // "justMyCode": false
+            "args": "algorithm=mappo task=hierarchial/chemical_production experiment.on_policy_n_envs_per_worker=3 experiment.on_policy_collected_frames_per_batch=300 experiment.max_n_frames=3000 experiment.evaluation_interval=300 experiment.checkpoint_interval=3000 experiment.loggers='[csv]' experiment.evaluation_episodes=30",
+            "justMyCode": false
         },
         {
             "name": "pdb VMAS Balance with MAPPO",
@@ -43,7 +43,7 @@
             "console": "integratedTerminal",
             //"args": "${command:pickArgs}"
             "args": "algorithm=mappo task=vmas/balance  experiment.on_policy_collected_frames_per_batch=100 experiment.max_n_frames=1000 experiment.evaluation_interval=200 experiment.checkpoint_interval=1000 experiment.loggers='[csv]'",
-            // "justMyCode": false
+            "justMyCode": false
         },
         {
             "name": "pdb Current File",
@@ -51,7 +51,7 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            // "justMyCode": false
+            "justMyCode": false
         }
     ]
 }
