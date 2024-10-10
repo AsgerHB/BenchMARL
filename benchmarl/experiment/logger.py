@@ -19,7 +19,8 @@ from torchrl.record.loggers import get_logger
 from torchrl.record.loggers.wandb import WandbLogger
 
 from benchmarl.environments import Task
-
+from benchmarl.environments.hierarchial.hierarchial_env import HierarcialEnvironment
+from benchmarl.environments.hierarchial.common import HierarchialTask
 
 class Logger:
     def __init__(
@@ -304,9 +305,25 @@ class Logger:
             total = len(rollouts)
             safe = total - unsafe
             return safe/total
+        elif self.task_name == "chemical_production":
+            unsafe = 0
+            for td in rollouts:
+                observations = td["agents", "observations"]
+                for observation in observations:
+                    volumes = observation[:, 0]
+                    for i, _ in enumerate(volumes):
+                        if not HierarcialEnvironment.Unit.is_safe(i + 1, volumes):
+                            unsafe += 1
+                            break
+                    else: # https://stackoverflow.com/a/654002/10595676
+                        continue
+                    break
+            
+            total = len(rollouts)
+            safe = total - unsafe
+            return safe/total
         else:
             return None
-
 
 class JsonWriter:
     """

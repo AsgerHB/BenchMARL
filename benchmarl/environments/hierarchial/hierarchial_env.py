@@ -5,8 +5,11 @@ from torchrl.data import DiscreteTensorSpec, CompositeSpec, UnboundedContinuousT
 from tensordict import TensorDict
 from torchrl.envs import TransformedEnv, StepCounter
 import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
 import io
 import numpy as np
+from enum import Enum
+import time
 
 # Debug stuff
 import random
@@ -264,12 +267,50 @@ class HierarcialEnvironment(EnvBase):
 
     #<editor-fold desc="Chemical Production">
 
+    def _cp_layout(self):
+        p1 = self.Provider(self, 1, [1.0, 0.5, 0.5, 0.0, 3.0])
+        p2 = self.Provider(self, 2, [1.0, 0.5, 0.5, 0.0, 3.0])
+        p3 = self.Provider(self, 3, [1.0, 0.5, 0.5, 0.0, 3.0])
+
+        # Units need a parent ref, that's why "self" is in there.
+        u1 = self.Unit(self, 1, p1, p1, p1)
+        u2 = self.Unit(self, 2, p2, p2, p2)
+        u3 = self.Unit(self, 3, p3, p3, p3)
+
+        p4 = self.Provider(self, 4, [2.0, 1.5, 1.5, 0.5, 4.0])
+        p5 = self.Provider(self, 5, [2.0, 1.5, 1.5, 0.5, 4.0])
+
+        u4 = self.Unit(self, 4, p4, u1, u2)
+        u5 = self.Unit(self, 5, u2, u3, p5)
+
+        p6 = self.Provider(self, 6, [3.0, 3.5, 3.5, 2.5, 2.0])
+        p7 = self.Provider(self, 7, [3.0, 3.5, 4.5, 2.5, 2.0])
+        p8 = self.Provider(self, 8, [3.0, 4.5, 2.5, 2.5, 2.0])
+
+        u6 = self.Unit(self, 6, p6, p6, u4)
+        u7 = self.Unit(self, 7, u4, u5, p7)
+        u8 = self.Unit(self, 8, u5, p8, p8)
+
+        p9 = self.Provider(self, 9, [6.0, 6.5, 8.5, 2.5, 2.0])
+        p10 = self.Provider(self, 10, [6.0, 6.5, 8.5, 0.5, 6.0])
+
+        u9 = self.Unit(self, 9, p9, u6, u7)
+        u10 = self.Unit(self, 10, u7, u8, p10)
+
+        d1 = self.Consumer(self, 1, u9, [0, 2, 2, 1, 0])
+        d2 = self.Consumer(self, 2, u10, [1, 1, 0, 2, 1])
+
+        units =     [u1, u2, u3, u4, u5, u6, u7, u8, u9, u10]
+        providers = [p1, p2, p3, p4, p5, p6, p7, p8, p9, p10]
+        consumers = [d1, d2]
+
+        return units, providers, consumers
+
     def _cp_set_spec(self, config):
+        self.units, self.providers, self.consumers = self._cp_layout()
         self.n_agents = 10 # The layout is hard-coded.
         self.period = 2.5  # So is the period
         self.t_act = config["t_act"]
-        self.min_stored = config["min_stored"]
-        self.max_stored = config["max_stored"]
         self.flow_rate = config["flow_rate"]
         self.flow_variance = config["flow_variance"]
         self.stored_initially = config["stored_initially"]
@@ -314,21 +355,137 @@ class HierarcialEnvironment(EnvBase):
             "agents": TensorDict({
                 "observations": observations,
             }, batch_size=self.n_agents)
-        })
+        })            
+
+    class Provider: 
+        def __init__(self, parent, id, cost):
+            self.parent = parent
+            self.id = id
+            self.cost = cost # Array of costs.
+        
+        def get_cost(self, time):
+            return self.cost[int(time/self.parent.t_act)]
+        
+    class Unit:
+        # Note that units etc don't contain internal state, only structure.
+        # State is passed as arguments to the class functions.
+        def __init__(self, parent, id, left, middle, right):
+            self.parent = parent
+            self.id = id
+            self.left = left
+            self.middle = middle
+            self.right = right
+
+        @staticmethod
+        def is_safe(id, volumes):
+            min_stored=2
+            max_stored=50
+            if volumes[id - 1] > max_stored:
+                return False
+            
+            if id == 9 or id == 10:
+                if volumes[id - 1] < min_stored:
+                    return False
+            
+            return True
+
+        def take_from(self, storage, volumes, time):
+            flow = self.parent.flow_rate 
+            r = torch.rand([], generator=self.parent.rng)
+            flow += r*self.parent.flow_variance
+            flow = min(flow, volumes[storage.id - 1])
+            flow *= self.parent.t_act
+
+            cost = 0
+
+            if isinstance(storage, self.parent.Unit):
+                # ID's are 1-10, volume indices are 0-9. Wish I was writing Julia.
+                volumes[storage.id - 1] -= flow
+                volumes[self.id - 1] += flow
+            elif isinstance(storage, self.parent.Provider):
+                volumes[self.id - 1] += flow
+                cost = flow*storage.get_cost(time)
+            else:
+                raise NotImplemented("Unexpected storage type.", storage)
+            
+            volumes[self.id - 1] = min(volumes[self.id - 1], 50 + 1)
+            return cost
+
+        
+        def take_action(self, action, volumes, time):
+            CCO = 0
+            COC = 1
+            OCC = 2
+            CCC = 3
+            OOC = 4
+            COO = 5
+            OCO = 6
+            OOO = 7
+            
+            cost = 0
+
+            if action in [OCC, OOC, OCO, OOO]:
+                cost += self.take_from(self.left, volumes, time)
+
+            if action in [COC, OOC, COO, OOO]:
+                cost += self.take_from(self.middle, volumes, time)
+
+            if action in [CCO, COO, OCO, OOO]:
+                cost += self.take_from(self.right, volumes, time)
+
+            return cost
+
+
+    class Consumer:
+        def __init__(self, parent, id, connected_to, consumption):
+            self.parent = parent
+            self.id = id
+            self.consumption = consumption # Consumption pattern as array
+            self.connected_to = connected_to
+
+        def consume(self, volumes, time):
+            multiplier = self.consumption[int(time/self.parent.t_act)]
+            if multiplier == 0:
+                return
+            flow = multiplier*self.parent.flow_rate
+            r = torch.rand([], generator=self.parent.rng)
+            flow += r*self.parent.flow_variance
+            flow = min(flow, volumes[self.connected_to.id - 1])
+            flow *= self.parent.t_act
+            
+            volumes[self.connected_to.id - 1] -= flow
+    
+    def _cp_simulate_point(self, volume, time, actions):
+        
+        new_volume = torch.clone(volume)
+        new_cost = torch.empty([self.n_agents], dtype=torch.float32)
+
+        for action, unit in zip(actions, self.units):
+            cost = unit.take_action(action, new_volume, time)
+            if not unit.is_safe(unit.id, new_volume):
+                cost += self.safety_violation_penalty
+            new_cost[unit.id - 1] = cost
+
+        for consumer in self.consumers:
+            consumer.consume(new_volume, time)
+        
+        new_time = (time + self.t_act) % self.period
+
+        return new_volume, new_time, new_cost
 
 
     def _cp_step(self, tensordict):
         actions = tensordict["agents", "action"]
         observations = tensordict["agents", "observations"]
-        v = observations[:, 0]
-        t = observations[:, 1]
+        volume = observations[:, 0]
+        time = observations[:, 1][1]
         
-        new_v = v + actions*self.t_act
-        new_t = (t + self.t_act)%self.period
-        new_observations = torch.stack([new_v, new_t], dim=1)
+        new_volume, new_time, new_cost = self._cp_simulate_point(volume, time, actions)
 
-        reward = actions - 4.0
+        reward = -new_cost
         reward = reward.unsqueeze(-1)
+
+        new_observations = torch.stack([new_volume, torch.full([self.n_agents], new_time)], dim=1)
 
         return TensorDict({
             "agents": TensorDict({
@@ -338,28 +495,51 @@ class HierarcialEnvironment(EnvBase):
             "done": False
         })
 
-
-
     def _cp_render(self, tensordict, mode="rgb_array"):
         actions = tensordict["agents", "action"]
         observations = tensordict["agents", "observations"]
-        v = observations[:, 0]
+        volume = observations[:, 0]
         t = observations[:, 1]
 
-        info_text = "debug info goes here."
+        info_text = f"t={t[1].item()}"
 
-        plt.ioff()
         fig, ax = plt.subplots()
-        ax.set_xlim(0, self.n_agents)
-        ax.set_ylim(0, self.max_stored)
-        plt.title("This one's gonna be tough.")
-        plt.text(0, 0.95, info_text, verticalalignment="top")
+        plt.gca().set_aspect('equal')
+        ax.set_axis_off()
+        fig.set_size_inches(3, 6)
+        plt.title("Chemical Production")
+        plt.text(30, 30, info_text, verticalalignment="top")
 
-        # Mainmatter
-        plt.plot(v)
-        plt.plot(t)
+        # Mainmatter #
+
+        unit_width, unit_height = 10, 12
+
+        # layout[3] is positioned as Unit 3 etc.
+        # and then layout[11] to layout[15] are the consumers
+        # which are drawn as 2 consumers, but actually have 6 pipes into them.
+        layout = [
+            (1, 5), (2, 5), (3, 5),
+              (1.5, 4), (2.5, 4),
+            (1, 3), (2, 3), (3, 3),
+              (1.5, 2), (2.5, 2),
+            # And then the positions of the consumers 
+            (1.5, 1), (2.5, 1),
+        ]
+        
+        plt.plot()
+        for i, v in enumerate(volume):
+            frame_color = "blue" if self.units[i].is_safe(i + 1, volume) else "red"
+            tank_level = unit_height*(v/(50))
+            offset = [o*30 for o in layout[i]]
+            frame_rect = Rectangle(offset, unit_width, unit_height, linewidth=8, color=frame_color)
+            unit_rect = Rectangle(offset, unit_width, unit_height, color="white")
+            liquid_rect = Rectangle(offset, unit_width, tank_level, color="gray")
+            ax.add_patch(frame_rect)
+            ax.add_patch(unit_rect)
+            ax.add_patch(liquid_rect)
 
         if mode == "rgb_array":
+            # This is from some stackoverflow question.
             with io.BytesIO() as buff:
                 fig.savefig(buff, format='rgba')
                 buff.seek(0)
@@ -374,7 +554,13 @@ class HierarcialEnvironment(EnvBase):
 
             return im
         elif mode == "window":
+            plt.ion()
             plt.show()
+        elif mode == "save to outputs/frame.png":
+            plt.ioff()
+            plt.savefig('outputs/frame.png', dpi=100)
+            plt.close()
+            time.sleep(0.5)
         elif mode == "plt":
             return plt
         else:
@@ -394,9 +580,7 @@ if __name__ == "__main__":
             initial_distance=50.0,
             safety_violation_penalty=10.0,)
     
-    chemical_production_config = dict(t_act=2.5,
-        min_stored=2,
-        max_stored=50,
+    chemical_production_config = dict(t_act=0.5,
         flow_rate=2.65,
         flow_variance=0.5,
         stored_initially=11,
@@ -415,15 +599,15 @@ if __name__ == "__main__":
     )
 
     env = create_env_fn()
-    check_env_specs(env)
+    # check_env_specs(env)
 
     # Take some steps manually
     s = env.reset()
     for i in range(0, 100):
         s = env.rand_action(s)
         s = env.step(s)
-        if i%2 == 0:
-            env.render(s, mode="window")
+        if i%1 == 0:
+            env.render(s, mode="save to outputs/frame.png")
         s = s["next"]
 
     # Can't recall what this is.
@@ -441,15 +625,15 @@ if __name__ == "__main__":
         storing_device="cpu",
     )
 
-    for i, data in enumerate(collector):
-        data_to_plot = data["agents", "observations"][:, :, 2]
-        labels = [a["name"] for a in create_env_fn().agents]
+    # for i, data in enumerate(collector):
+    #     data_to_plot = data["agents", "observations"][:, :, 2]
+    #     labels = [a["name"] for a in create_env_fn().agents]
 
-        for i in range(data_to_plot.shape[1]):
-            plt.plot(data_to_plot[:, i], label=labels[i])
+    #     for i in range(data_to_plot.shape[1]):
+    #         plt.plot(data_to_plot[:, i], label=labels[i])
 
-        plt.legend()
-        plt.show()
+    #     plt.legend()
+    #     plt.show()
 
     
     print("🦑🦑")
