@@ -5,7 +5,7 @@ date
 
 source venv/bin/activate
 
-results_dir="$HOME/Results/N-player\ CP\ MAPPO"
+results_dir="$HOME/Results/N-player CP MAPPO"
 mkdir -p "$results_dir"
 python benchmarl/run.py algorithm=mappo task=hierarchial/chemical_production \
     experiment.loggers="[csv]" \
