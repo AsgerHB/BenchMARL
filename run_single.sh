@@ -11,8 +11,6 @@ source venv/bin/activate
 results_dir="$HOME/Results/N-player\ CP\ MAPPO"
 mkdir -p "$HOME/Results/N-player CP MAPPO"
 
-echo "Safety violation penalty of 200." > "$results_dir/note.txt"
-
 python benchmarl/run.py algorithm=mappo task=hierarchial/chemical_production \
     experiment.loggers="[csv]" \
     experiment.train_device=cuda \
@@ -20,7 +18,7 @@ python benchmarl/run.py algorithm=mappo task=hierarchial/chemical_production \
     experiment.save_folder="$results_dir" \
     experiment.max_n_frames=6000000 \
     experiment.evaluation_interval=600000 \
-    task.safety_violation_penalty=1600 \
+    task.safety_violation_penalty=25600 \
     seed=$RANDOM
 
 echo "Experiment ended"
