@@ -188,7 +188,7 @@ experiment_paths
 splitpath(experiment_paths[1])[end]
 
 # ╔═╡ d744a864-5f2f-43e8-8913-20af703095fc
-hyper_parameters = let 
+hyper_parameters, mismatch_hyper_parameters = let 
 	hyper_parameters = []
 	for e in experiments
 		hparams_file = joinpath(results_base_path, e, e, "texts", "hparams0.txt")
@@ -200,13 +200,36 @@ hyper_parameters = let
 		end
 	end
 	whichever_seed(s) = replace(s, r"seed: \w+" => "seed: whichever")
+	mismatch_hyper_parameters = false
 	for (i, hp) in enumerate(hyper_parameters)
 		if whichever_seed(hp) != whichever_seed(hyper_parameters[1])
+			mismatch_hyper_parameters = true
 			@warn "Mismatch in hyper-parameters between experiments 1 and $i"
 		end
 	end
-	hyper_parameters
+	hyper_parameters, mismatch_hyper_parameters
 end
+
+# ╔═╡ 793c6e2e-876e-46ed-a03e-faa5d56684df
+if mismatch_hyper_parameters
+md"""
+!!! danger "Uncomparable"
+	Mismatch between hyper-parameters
+"""
+else
+md"""
+!!! info "Good"
+	Hyper-parameters match.
+"""
+end
+
+# ╔═╡ 201f84c5-8633-47e7-9ebb-1381402f7977
+function firstmatch(s, re)
+	first(eachmatch(re, s)).match
+end
+
+# ╔═╡ 5e6ad275-c8a0-4e2a-bf0b-f77762711b3c
+[firstmatch(h, r"'safety_violation_penalty':\s\d+") for h in hyper_parameters]
 
 # ╔═╡ 49035f17-1c3f-4e60-8bb9-6eb678dc2acf
 md"""
@@ -462,7 +485,7 @@ end
 zoomed_in_ylim = if variant == "Cruise Control"
 	(0, 200000)
 else
-	(0, 2000)
+	(0, 2500)
 end
 
 # ╔═╡ 701b52ac-5871-4d2b-afdb-52422fefee0b
@@ -2082,14 +2105,16 @@ version = "1.4.1+1"
 # ╟─098793f2-a145-44eb-9629-5c25a5cfac7a
 # ╟─ed9ef54c-3554-4c2f-88b7-b50758d481b9
 # ╟─658955ce-4fd5-42e0-aab3-8c9d31dcc480
-# ╠═03a7a8c8-5aab-4ad1-8343-3c9f8d103601
+# ╟─03a7a8c8-5aab-4ad1-8343-3c9f8d103601
 # ╟─1c3469fb-57b8-4f8b-a760-2423fe3adfdb
-# ╠═701b52ac-5871-4d2b-afdb-52422fefee0b
+# ╟─701b52ac-5871-4d2b-afdb-52422fefee0b
 # ╟─e874d5a2-14c6-4b1f-b2d4-69d325666d4e
-# ╠═af22ee41-1e36-4f08-ad99-bd0959f0a154
+# ╟─af22ee41-1e36-4f08-ad99-bd0959f0a154
 # ╠═b36d6b21-5118-46c5-a2b6-55c6ca75545f
-# ╠═22baed78-823a-4bab-b1cf-f99ec4f7d701
+# ╟─22baed78-823a-4bab-b1cf-f99ec4f7d701
 # ╠═92b500da-2a2e-444a-b224-3aecd5d96393
+# ╠═5e6ad275-c8a0-4e2a-bf0b-f77762711b3c
+# ╟─793c6e2e-876e-46ed-a03e-faa5d56684df
 # ╠═cc717080-4e7d-4adf-8413-5c7644bfd6a1
 # ╠═982cc0c2-57a3-4a49-a22b-94a383e2fa0f
 # ╟─e6a498e9-a632-4397-93ad-af89fd39c8f0
@@ -2098,6 +2123,7 @@ version = "1.4.1+1"
 # ╠═d9126554-aa49-4af9-876a-e12eefac1342
 # ╠═8f19f54a-938a-4ddf-ad96-9bb56e3da2c5
 # ╠═d744a864-5f2f-43e8-8913-20af703095fc
+# ╠═201f84c5-8633-47e7-9ebb-1381402f7977
 # ╟─49035f17-1c3f-4e60-8bb9-6eb678dc2acf
 # ╠═3ec450f7-1f16-47d3-8bfb-de02980c0d7d
 # ╠═eed44f59-4f26-4b54-8b7c-e1443871d985
